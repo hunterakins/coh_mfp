@@ -43,6 +43,19 @@ fft_len = 2048
 SNR = 20 # after fft gain is accounted for
 fs = 1500 # sampling rate
 
+""" Replica grid parameters """
+dz =  5
+zmax = 216.5
+dr = 10
+rmax = 10*1e3
+
+def make_sim_name(freq):
+    """ File stem of simulated data"""
+    return 'swell_' + str(freq)
+
+def get_sim_folder():
+    return 'at_files/'
+
 if __name__ == '__main__':
     """ 
     Generate a fake range rate track at 1500 Hz sampling rate
@@ -69,19 +82,16 @@ if __name__ == '__main__':
         env = env_builder()
         zs = 54
         num_rcvrs = zr.size
-        dz =  5
-        zmax = 216.5
-        dr = 1
-        rmax = 10*1e3
 
         """ Run the model and get the modes and wavenumbers
         to do a time domain simulation that neglects doppler"""
-
-        folder = 'at_files/'
-        fname = 'swell_'+str(freq)
+        """ Run once to get the modes shapes on the array and the kr """
+        folder = get_sim_folder()
+        fname = make_sim_name(freq)
         env.add_source_params(freq, zs, zr)
         env.add_field_params(dz, zmax, dr, rmax)
-        p, pos = env.run_model('kraken', folder, fname, zr_range_flag=False)
+        p, pos = env.run_model('kraken', folder, fname, zr_flag=True, zr_range_flag=True)
+        print(p.shape)
         modes = read_modes(**{'fname':folder+fname+'.mod', 'freq':freq})
         print(modes.phi.shape)
         As = modes.phi[0,:] # extract source exctiation
@@ -89,6 +99,18 @@ if __name__ == '__main__':
         krs = modes.k
         num_modes = krs.size
 
+        """ Run a second time to generate the replicas """
+        """ Put a source at each of the receiver positoins
+        reciprocity gives you the field of replicas for each source  """
+        """ Settin zs as zr is just a placeholder, it doesn't matter """
+        env.add_source_params(freq, zr, [zs])
+        p, pos = env.run_model('kraken', folder, fname, zr_flag=False,zr_range_flag=False)
+        print(p.shape, 'expected shape 21 by like 40 by like 10000' )
+
+
+
+        """ Manually compute field to get high range resolution required
+        for the time domain sim """
         """ Add the source signal for this frequency to the field """
         freq_contrib = np.zeros((zr.size, r.size), dtype=np.complex128)
         """Compute modal sum """

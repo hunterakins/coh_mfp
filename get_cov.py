@@ -84,7 +84,10 @@ def make_cov_mat_seq(freq, cov_int_time):
 
     """ Load up the relevant dvecs """
     dvecs = load_dvec(freq)
+    dvecs = dvecs / np.linalg.norm(dvecs, axis=0)
     num_rcvrs = dvecs.shape[0]
+    print(np.linalg.norm(dvecs[:,0]))
+    print(np.linalg.norm(dvecs[:,-1]))
     
     """ Initialize sample covariance array """
     K_samp = np.zeros((num_rcvrs, num_rcvrs, num_frames), dtype=np.complex128)
@@ -97,7 +100,8 @@ def make_cov_mat_seq(freq, cov_int_time):
     """ Save it """
     fname = make_cov_name(freq)
     tvals = tgrid[::frame_len]
-    print(fname)
+    print(tvals.shape, K_samp.shape)
+    tvals = tvals[:num_frames]
     np.save(fname, K_samp)
     tname = make_cov_time_name()
     np.save(tname, tvals)
