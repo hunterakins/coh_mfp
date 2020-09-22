@@ -2,6 +2,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from env.env.envs import factory
 from pyat.pyat.readwrite import read_modes
+from coh_mfp.config import freqs, source_vel, fft_len, SNR, fs, dz, zmax, dr, rmax, r0, r1, zr, zs, fft_spacing, acc_amp, acc_T
+
 
 '''
 Description:
@@ -35,19 +37,6 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 '''
 
 
-""" Pick source params
-and receiver config """
-freqs = [49, 64, 79, 94, 109]#, 112, 127, 130, 145, 148]
-source_vel = 3 # ship range rate in m/s
-fft_len = 2048
-SNR = 20 # after fft gain is accounted for
-fs = 1500 # sampling rate
-
-""" Replica grid parameters """
-dz =  5
-zmax = 216.5
-dr = 10
-rmax = 10*1e3
 
 def make_sim_name(freq):
     """ File stem of simulated data"""
@@ -56,22 +45,26 @@ def make_sim_name(freq):
 def get_sim_folder():
     return 'at_files/'
 
-if __name__ == '__main__':
+def run_sim(num_realizations=1):
     """ 
     Generate a fake range rate track at 1500 Hz sampling rate
     """
-    r0 = 1000
-    r1 = 8000 
     R = r1-r0 # total distance traveled1
     T = R / source_vel # total time in seconds
     print(T) #
     dt = 1/fs
     t = np.arange(0, T+dt, dt)
     print(t.size)
-    r = r0 + source_vel*t
+    acc_f = 1/acc_T
+    r = r0 + source_vel*t + acc_amp/(2*np.pi*acc_f)*np.sin(2*np.pi*acc_f*t)
+    plt.figure()
+    plt.plot(r[:int(120/dt)])
+    plt.savefig('range_sample.png')
+    plt.figure()
+    plt.plot([source_vel]*int(720/dt) +acc_amp*np.sin(2*np.pi*acc_f*t)[:int(720/dt)])
+    plt.savefig('v_sample.png')
 
     """ Calculate time domain field with zero initial phase """
-    zr = np.array([94.125, 99.755, 105.38, 111.00, 116.62, 122.25, 127.88, 139.12, 144.74, 150.38, 155.99, 161.62, 167.26, 172.88, 178.49, 184.12, 189.76, 195.38, 200.99, 206.62, 212.25])
     field = np.zeros((zr.size, r.size))
 
     
@@ -89,7 +82,9 @@ if __name__ == '__main__':
         folder = get_sim_folder()
         fname = make_sim_name(freq)
         env.add_source_params(freq, zs, zr)
-        env.add_field_params(dz, zmax, dr, rmax)
+        ship_dr = source_vel * fft_spacing / fs
+        print('ship_dr', ship_dr)
+        env.add_field_params(dz, zmax, ship_dr, rmax)
         p, pos = env.run_model('kraken', folder, fname, zr_flag=True, zr_range_flag=True)
         print(p.shape)
         modes = read_modes(**{'fname':folder+fname+'.mod', 'freq':freq})
@@ -105,7 +100,8 @@ if __name__ == '__main__':
         """ Settin zs as zr is just a placeholder, it doesn't matter """
         env.add_source_params(freq, zr, [zs])
         p, pos = env.run_model('kraken', folder, fname, zr_flag=False,zr_range_flag=False)
-        print(p.shape, 'expected shape 21 by like 40 by like 10000' )
+        print('replica dr', pos.r.range[1] - pos.r.range[0])
+        print(p.shape, 'expected shape 21 by like 40 by like ', rmax/ship_dr )
 
 
 
@@ -142,5 +138,15 @@ if __name__ == '__main__':
     noise_var = post_fft_signal_pow / intensity_ratio
     sample_var = noise_var / fft_len
     noise = np.sqrt(sample_var)*np.random.randn(field.size).reshape(field.shape)
-    field += noise
-    np.save('/oasis/tscc/scratch/fakins/coh_mfp/sim_data.npy', field)
+
+    for sim_iter in range(num_realizations):
+        noise = np.sqrt(sample_var)*np.random.randn(field.size).reshape(field.shape)
+        sim_data = field+noise
+        np.save('/oasis/tscc/scratch/fakins/coh_mfp/sim_data.npy', sim_data)
+    return
+
+def make_raw_ts_name(sim_iter):
+    return '/oasis/tscc/scratch/fakins/coh_mfp/sim_data_' + str(sim_iter) + '.npy'
+
+if __name__ == '__main__':
+    print('hi')

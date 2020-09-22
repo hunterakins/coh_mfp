@@ -1,7 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.signal import stft
-from coh_mfp.sim import freqs, source_vel, fft_len
+from coh_mfp.sim import make_raw_ts_name
+from coh_mfp.config import freqs, source_vel, fft_len, fft_spacing, num_realizations, PROJ_ROOT
 
 '''
 Description:
@@ -16,10 +17,9 @@ Author: Hunter Akins
 Institution: UC San Diego, Scripps Institution of Oceanography
 
 '''
-PROJ_ROOT = '/oasis/tscc/scratch/fakins/coh_mfp/'
 
-def load_ts(proj_root=PROJ_ROOT):
-    x = np.load(proj_root+'sim_data.npy')
+def load_ts(sim_iter, proj_root=PROJ_ROOT):
+    x = np.load(make_raw_ts_name(sim_iter))
     return x
 
 def check_small_samp(x):
@@ -42,18 +42,18 @@ def check_small_samp(x):
     plt.savefig('check.png')
     plt.close(fig)
 
-def make_dvec_name(freq, proj_root =PROJ_ROOT):
+def make_dvec_name(freq, sim_iter, proj_root =PROJ_ROOT):
     """
     Create a string that is the absolute file
     path of the "dvec" for the given source freq"""
-    return proj_root + str(freq) + '_dvec.npy'
+    return proj_root + str(freq) + '_dvec' + str(sim_iter) +'.npy'
 
-def load_dvec(freq, proj_root=PROJ_ROOT):
+def load_dvec(freq, sim_iter, proj_root=PROJ_ROOT):
     """ load the dvec into a numpy array
     Input
     freq - float
         source frequency band of dvecs you want """
-    dvec_name = make_dvec_name(freq, proj_root=proj_root)
+    dvec_name = make_dvec_name(freq, sim_iter, proj_root=proj_root)
     x = np.load(dvec_name)
     return x
 
@@ -70,10 +70,10 @@ def load_tgrid(proj_root=PROJ_ROOT):
     x = np.load(make_tgrid_name(proj_root=PROJ_ROOT))
     return x
 
-fft_spacing = 1024 # spacingn in samples
+
 n_overlap = fft_len-fft_spacing # number of samples ot overlap
 
-if __name__ == '__main__':
+def gen_dvecs():
     x = load_ts()
     check_small_samp(x)
     
@@ -106,6 +106,5 @@ if __name__ == '__main__':
 
     #check_small_samp(x)
 
-
-        
-        
+if __name__ == '__main__':
+    gen_dvecs()
