@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.signal import stft
 from coh_mfp.sim import make_raw_ts_name
-from coh_mfp.config import freqs, source_vel, fft_len, fft_spacing, num_realizations, PROJ_ROOT
+#from coh_mfp.config import freqs, source_vel, fft_len, fft_spacing, lizations, PROJ_ROOT
 
 '''
 Description:
@@ -18,8 +18,8 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 
 '''
 
-def load_ts(sim_iter, proj_root=PROJ_ROOT):
-    x = np.load(make_raw_ts_name(sim_iter))
+def load_ts(sim_iter, proj_root):
+    x = np.load(make_raw_ts_name(sim_iter, proj_root))
     return x
 
 def check_small_samp(x):
@@ -42,13 +42,13 @@ def check_small_samp(x):
     plt.savefig('check.png')
     plt.close(fig)
 
-def make_dvec_name(freq, sim_iter, proj_root =PROJ_ROOT):
+def make_dvec_name(freq, sim_iter, proj_root):
     """
     Create a string that is the absolute file
     path of the "dvec" for the given source freq"""
     return proj_root + str(freq) + '_dvec' + str(sim_iter) +'.npy'
 
-def load_dvec(freq, sim_iter, proj_root=PROJ_ROOT):
+def load_dvec(freq, sim_iter, proj_root):
     """ load the dvec into a numpy array
     Input
     freq - float
@@ -57,32 +57,31 @@ def load_dvec(freq, sim_iter, proj_root=PROJ_ROOT):
     x = np.load(dvec_name)
     return x
 
-def make_tgrid_name(proj_root=PROJ_ROOT):
+def make_tgrid_name(proj_root):
     """create string for absolute file 
     path of the corresponding time values for the
     given data vectors (freq. domain field) """
     return proj_root + '_times.npy'
 
-def load_tgrid(proj_root=PROJ_ROOT):
+def load_tgrid(proj_root):
     """
-    Load the tgrid  
+    Load the times associated with the ~beginning~ of the 
+    fft windows used to form the data vectors
     """
-    x = np.load(make_tgrid_name(proj_root=PROJ_ROOT))
+    x = np.load(make_tgrid_name(proj_root))
     return x
 
-
-n_overlap = fft_len-fft_spacing # number of samples ot overlap
-
-def gen_dvecs():
-    x = load_ts()
+def gen_dvecs(sim_iter, conf):
+    n_overlap = conf.fft_len-conf.fft_spacing # number of samples ot overlap
+    x = load_ts(sim_iter, conf.proj_root)
     check_small_samp(x)
     
-    fgrid, times, vals = stft(x, fs=1500, nperseg=fft_len, noverlap=n_overlap, nfft=4096)
+    fgrid, times, vals = stft(x, fs=1500, nperseg=conf.fft_len, noverlap=n_overlap, nfft=8192)
     print(x.shape, fgrid.shape, times.shape, vals.shape)
-    v = source_vel
-    print('Source velocity', source_vel)
+    v = conf.source_vel
+    print('Source velocity', conf.source_vel)
     
-    for freq in freqs:
+    for freq in conf.freqs:
         print('Freq', freq)
         f_dop = freq - freq*v/1500
         print('Doppler shifted_freq', f_dop)
@@ -92,19 +91,18 @@ def gen_dvecs():
         print(fgrid[f_ind-1], 'adjacent f_grid f')
         print(fgrid[f_ind+1], 'adjacent f_grid f')
         fvals = vals[:,f_ind,:]
-        dvec_name = make_dvec_name(freq)
+        dvec_name = make_dvec_name(freq, sim_iter, conf.proj_root)
         np.save(dvec_name, fvals)
-    noise_freqs = [x + 2 for x in freqs]
+    noise_freqs = [x + 2 for x in conf.freqs]
     for freq in noise_freqs:
         print('Freq', freq)
         #f_dop = freq - freq*v/1500
         f_ind = np.argmin([abs(freq - fgrid[i]) for i in range(len(fgrid))])
         fvals = vals[:,f_ind,:]
-        dvec_name = make_dvec_name(freq)
+        dvec_name = make_dvec_name(freq, sim_iter, conf.proj_root)
         np.save(dvec_name, fvals)
-    np.save(make_tgrid_name(), times)
+    np.save(make_tgrid_name(conf.proj_root), times)
 
-    #check_small_samp(x)
 
 if __name__ == '__main__':
-    gen_dvecs()
+    gen_dvecs(0)
