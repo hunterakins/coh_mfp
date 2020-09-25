@@ -1,5 +1,6 @@
 import numpy as np
 import coh_mfp.config as conf
+import os
 from env.env.json_reader import write_json
 
 '''
@@ -61,11 +62,12 @@ fig_folder = '/home/fakins/code/coh_mfp/pics/'
 
 num_realizations = 5
 
-
 exp_id = 0
 
-proj_root = '/oasis/tscc/scratch/fakins/coh_mfp/' + str(exp_id) + '/'
-
+coh_mfp_root = '/oasis/tscc/scratch/fakins/coh_mfp/confs/'
+proj_root = coh_mfp_root + str(exp_id) + '/'
+if str(exp_id) not in os.listdir(coh_mfp_root):
+    os.mkdir(proj_root)
 
 if __name__ == '__main__':
     """

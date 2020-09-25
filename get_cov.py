@@ -1,7 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
 #from coh_mfp.config import freqs, fs, source_vel, fft_spacing, PROJ_ROOT, num_realizations
-from coh_mfp.config import PROJ_ROOT
 from coh_mfp.get_dvecs import load_dvec, load_tgrid
 
 '''
@@ -22,6 +21,7 @@ def make_cov_name(freq, sim_iter, proj_root,super_type, **kwargs):
     if super_type =='none':
         name = proj_root + str(freq) + '_cov' + str(sim_iter) + '.npy' 
     elif super_type == 'range':
+        print(kwargs)
         num_ranges = kwargs['num_ranges'] 
         phase_key = kwargs['phase_key']
         name = make_range_super_cov_name(freq, num_ranges, sim_iter, proj_root, phase_key) 
@@ -41,6 +41,7 @@ def make_range_super_cov_name(freq, num_ranges, sim_iter, proj_root, phase_key='
     return name
 
 def make_cov_time_name(proj_root):
+    name = proj_root + 'cov_t.npy'   
     return name
 
 def get_frame_len(cov_int_time,fft_spacing, fs):
@@ -113,7 +114,7 @@ def stack_dvecs(dvec_list, proj_root, phase_key='naive', freqs=None):
         super_dvecs[i*num_rcvrs:(i+1)*num_rcvrs, :] = dvecs
     return super_dvecs
 
-def range_stack_dvecs(dvecs, freq, phase_key='naive', num_ranges=2):
+def range_stack_dvecs(dvecs, freq, proj_root, source_vel, fft_spacing, fs, phase_key='naive', num_ranges=2):
     """
     Similar to stack_dvecs, but instead of stacking in frequency, 
     stack in range
@@ -236,7 +237,7 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
 
     if super_type=='none':
         freq = freqs[0]
-        dvecs = load_dvec(freq, sim_iter)
+        dvecs = load_dvec(freq, sim_iter, proj_root)
         dvecs = dvecs / np.linalg.norm(dvecs, axis=0)
     elif super_type == 'range':
         freq = freqs[0]
@@ -244,9 +245,9 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
         phase_key=kwargs['phase_key']
         print('num ranges', num_ranges)
         print('phase_key', phase_key)
-        dvecs = load_dvec(freq, sim_iter)
+        dvecs = load_dvec(freq, sim_iter, proj_root)
         dvecs = dvecs / np.linalg.norm(dvecs, axis=0)
-        dvecs = range_stack_dvecs(dvecs, freq, phase_key=phase_key, num_ranges=num_ranges)
+        dvecs = range_stack_dvecs(dvecs, freq, proj_root, conf.source_vel, conf.fft_spacing, conf.fs, phase_key=phase_key, num_ranges=num_ranges)
     elif super_type == 'freq':
         dvec_list = get_freq_dvec_list(freqs, sim_iter, proj_root)
         dvecs = stack_dvecs(dvec_list, phase_key=phase_key, freqs=freqs)
@@ -256,7 +257,7 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
     K_samp = get_K_samp(dvecs, num_frames, frame_len)
 
     """ Save it """
-    fname = make_cov_name(freq, sim_iter, conf.proj_root, super_type)
+    fname = make_cov_name(freq, sim_iter, conf.proj_root, super_type, **kwargs)
     tvals = tgrid[::frame_len]
     tvals = tvals[:num_frames]
     np.save(fname, K_samp)
@@ -375,7 +376,7 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
 #    np.save(tname, tvals)
 #    return tvals, K_samp
 
-def load_cov(freq, proj_root, sim_iter, super_type, **kwargs):
+def load_cov(freq, sim_iter, proj_root, super_type, **kwargs):
     """ Load up cov estimates
     for source frequency freq 
     Input 

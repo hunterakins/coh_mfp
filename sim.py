@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from env.env.envs import factory
 from pyat.pyat.readwrite import read_modes
+import os
 
 
 '''
@@ -41,8 +42,14 @@ def make_sim_name(freq):
     """ File stem of simulated data"""
     return 'swell_' + str(freq)
 
-def get_sim_folder():
-    return 'at_files/'
+def get_sim_folder(proj_root):
+    """
+    Get the path to the folder where the simulation
+    outputs live 
+    """
+    if 'at_files' not in os.listdir(proj_root):
+        os.mkdir(proj_root + 'at_files/')
+    return proj_root + 'at_files/'
 
 def run_sim(conf):
     """ 
@@ -57,6 +64,7 @@ def run_sim(conf):
     acc_f = 1/conf.acc_T
     r = conf.r0 + conf.source_vel*t + conf.acc_amp/(2*np.pi*acc_f)*np.sin(2*np.pi*acc_f*t)
 
+
     """ Calculate time domain field with zero initial phase """
     field = np.zeros((conf.zr.size, r.size))
     intensity_list = []
@@ -69,7 +77,7 @@ def run_sim(conf):
         """ Run the model and get the modes and wavenumbers
         to do a time domain simulation that neglects doppler"""
         """ Run once to get the modes shapes on the array and the kr """
-        folder = get_sim_folder()
+        folder = get_sim_folder(conf.proj_root)
         fname = make_sim_name(freq)
         env.add_source_params(freq, conf.zs, conf.zr)
         env.add_field_params(conf.dz, conf.zmax, conf.ship_dr, conf.rmax)

@@ -21,7 +21,7 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 """ Pick source params
 and receiver config """
 
-conf_folder = '/oasis/tscc/scratch/fakins/coh_mfp/confs'
+conf_folder = '/oasis/tscc/scratch/fakins/coh_mfp/confs/'
 
 class ExpConf:
     def __init__(self, var_dict):
@@ -50,9 +50,7 @@ class ExpConf:
         self.fig_folder = var_dict['fig_folder']
         self.num_realizations = var_dict['num_realizations']
         self.exp_id = var_dict['exp_id']
-        self.freq = var_dict['freq']
    
-
 def load_config(exp_id):
     name = make_conf_name(exp_id)
     var_dict = read_json(name)
@@ -63,7 +61,7 @@ def get_conf_dict(var_dict):
     save_dict = var_dict.copy()
 
     builtin_keys = [x for x in save_dict.keys() if x[:2] == '__']
-    mod_keys = ['np', 'conf', 'write_json']
+    mod_keys = ['np', 'conf', 'write_json', 'os']
     other_keys = ['var_dict']
 
     annoying_keys = mod_keys + builtin_keys + other_keys
