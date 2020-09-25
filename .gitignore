@@ -1,2 +1,3 @@
 at_files/*
 *.swp
+*.npy
