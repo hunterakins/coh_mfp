@@ -21,7 +21,6 @@ def make_cov_name(freq, sim_iter, proj_root,super_type, **kwargs):
     if super_type =='none':
         name = proj_root + str(freq) + '_cov' + str(sim_iter) + '.npy' 
     elif super_type == 'range':
-        print(kwargs)
         num_ranges = kwargs['num_ranges'] 
         phase_key = kwargs['phase_key']
         name = make_range_super_cov_name(freq, num_ranges, sim_iter, proj_root, phase_key) 
@@ -146,12 +145,10 @@ def range_stack_dvecs(dvecs, freq, proj_root, source_vel, fft_spacing, fs, phase
         raise ValueError('Invalid phase key provided. Options are naive, source_correct, and MP_norm')
     lam = 1500 / freq
     replica_dr = source_vel * fft_spacing/fs
-    stride = int(lam/2 / replica_dr)
+    stride = int(lam/2 / replica_dr) 
     super_dvecs = np.zeros((num_ranges*num_rcvrs, num_times), dtype=np.complex128)
-    print('stride', stride)
     for i in range(num_ranges):
         rel_dvecs = dvecs[:,i*stride:]
-        print(rel_dvecs.shape[1])
         super_dvecs[i*num_rcvrs:(i+1)*num_rcvrs, :rel_dvecs.shape[1]] = rel_dvecs
     return super_dvecs
 
@@ -169,9 +166,8 @@ def get_K_samp(dvecs, num_frames, frame_len):
     frame_len - int
         number of data vectors used in each frame
     Output-
-    K_samp - numpy ndarrayt
+    K_samp - numpy ndarray
         first two axes are receiver index, last axis is time
-    t
     """
 
     num_rcvrs = dvecs.shape[0]
@@ -182,6 +178,7 @@ def get_K_samp(dvecs, num_frames, frame_len):
         inds = slice(i*frame_len, (i+1)*frame_len)
         tmp_K = np.cov(dvecs[:,inds])
         K_samp[:,:,i] = tmp_K
+    return K_samp
 
 def get_freq_dvec_list(freqs, sim_iter, proj_root):
     """
@@ -243,8 +240,6 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
         freq = freqs[0]
         num_ranges = kwargs['num_ranges']
         phase_key=kwargs['phase_key']
-        print('num ranges', num_ranges)
-        print('phase_key', phase_key)
         dvecs = load_dvec(freq, sim_iter, proj_root)
         dvecs = dvecs / np.linalg.norm(dvecs, axis=0)
         dvecs = range_stack_dvecs(dvecs, freq, proj_root, conf.source_vel, conf.fft_spacing, conf.fs, phase_key=phase_key, num_ranges=num_ranges)
@@ -261,6 +256,7 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
     tvals = tgrid[::frame_len]
     tvals = tvals[:num_frames]
     np.save(fname, K_samp)
+    x = np.load(fname)
     tname = make_cov_time_name(conf.proj_root)
     np.save(tname, tvals)
     return tvals, K_samp
@@ -382,6 +378,14 @@ def load_cov(freq, sim_iter, proj_root, super_type, **kwargs):
     Input 
     freq - int
         source frequency
+    sim_iter - int
+        simulation realiation id
+    proj_root - string  
+        my fave arg
+    super_type - string
+        'none', 'range', freq'
+    kwargs - optional dict
+        see make_cov_name for switches
     Output 
     tvals - np 1darray of floats
         times associated with the left-hand side
@@ -391,6 +395,7 @@ def load_cov(freq, sim_iter, proj_root, super_type, **kwargs):
     """
     fname = make_cov_name(freq, sim_iter,  proj_root, super_type, **kwargs)
     tname = make_cov_time_name(proj_root)
+    print(fname)
     K_samp = np.load(fname)
     tvals = np.load(tname)
     return tvals, K_samp

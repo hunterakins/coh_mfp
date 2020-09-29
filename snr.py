@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from sim import freqs
-from get_dvecs import load_dvec, load_tgrid
+from coh_mfp.config import freqs
+from coh_mfp.get_dvecs import load_dvec, load_tgrid
 
 '''
 Description:

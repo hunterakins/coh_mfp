@@ -22,6 +22,7 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 and receiver config """
 
 conf_folder = '/oasis/tscc/scratch/fakins/coh_mfp/confs/'
+local_conf_folder = 'confs/'
 
 class ExpConf:
     def __init__(self, var_dict):
@@ -51,8 +52,8 @@ class ExpConf:
         self.num_realizations = var_dict['num_realizations']
         self.exp_id = var_dict['exp_id']
    
-def load_config(exp_id):
-    name = make_conf_name(exp_id)
+def load_config(exp_id, local=False):
+    name = make_conf_name(exp_id, local)
     var_dict = read_json(name)
     exp_conf = ExpConf(var_dict)
     return exp_conf
@@ -69,6 +70,8 @@ def get_conf_dict(var_dict):
         save_dict.pop(key)
     return save_dict
 
-def make_conf_name(exp_id):
+def make_conf_name(exp_id, local=False):
+    if local==True:
+        return local_conf_folder + str(exp_id) + '.json'
     return conf_folder + str(exp_id) + '.json'
 

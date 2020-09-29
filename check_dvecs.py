@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from coh_mfp.sim import freqs
+from coh_mfp.config import freqs
 from coh_mfp.get_dvecs import load_dvec, load_tgrid
 
 '''

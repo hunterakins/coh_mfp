@@ -61,7 +61,7 @@ def make_tgrid_name(proj_root):
     """create string for absolute file 
     path of the corresponding time values for the
     given data vectors (freq. domain field) """
-    return proj_root + '_times.npy'
+    return proj_root + 'times.npy'
 
 def load_tgrid(proj_root):
     """
@@ -77,12 +77,9 @@ def gen_dvecs(sim_iter, conf):
     check_small_samp(x)
     
     fgrid, times, vals = stft(x, fs=1500, nperseg=conf.fft_len, noverlap=n_overlap, nfft=8192)
-    print(x.shape, fgrid.shape, times.shape, vals.shape)
     v = conf.source_vel
-    print('Source velocity', conf.source_vel)
     
     for freq in conf.freqs:
-        print('Freq', freq)
         f_dop = freq - freq*v/1500
         print('Doppler shifted_freq', f_dop)
         f_ind = np.argmin([abs(f_dop - fgrid[i]) for i in range(len(fgrid))])
@@ -95,7 +92,7 @@ def gen_dvecs(sim_iter, conf):
         np.save(dvec_name, fvals)
     noise_freqs = [x + 2 for x in conf.freqs]
     for freq in noise_freqs:
-        print('Freq', freq)
+        print('Noise freq', freq)
         #f_dop = freq - freq*v/1500
         f_ind = np.argmin([abs(freq - fgrid[i]) for i in range(len(fgrid))])
         fvals = vals[:,f_ind,:]

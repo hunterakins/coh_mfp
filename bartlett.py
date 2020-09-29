@@ -1,11 +1,14 @@
 import numpy as np
+import itertools
 import pickle
 import sys, os
 from matplotlib import pyplot as plt
+import matplotlib.cm as cm
 from coh_mfp.sim import get_sim_folder, make_sim_name
-from coh_mfp.config import source_vel, freqs, num_ranges, r0, fft_spacing, fs, SNR, PROJ_ROOT, zs, num_realizations, ship_dr, dr, fig_folder
-from coh_mfp.get_cov import load_cov, load_super_cov, load_range_super_cov
-from signal_proc.mfp.wnc import run_wnc
+#from coh_mfp.config import source_vel, freqs, num_ranges, r0, fft_spacing, fs, SNR, PROJ_ROOT, zs, num_realizations, ship_dr, dr, fig_folder
+from coh_mfp.config import ExpConf, load_config
+from coh_mfp.get_cov import load_cov
+from signal_proc.mfp.wnc import run_wnc, lookup_run_wnc
 from pyat.pyat.readwrite import read_shd
 import time
 '''
@@ -24,23 +27,24 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 
 
 
-def load_replicas(freq):
+def load_replicas(freq, conf):
     """
     Load the replicas from sim.py for source frequency freq
     input
     freq - int or float
+    conf - ExpConf object
     output 
     pfield - np ndarray
         num_rcvrs, num_depths, num_ranges = pfield.shape
     pos - pyat Pos object
         correpsonding source positions
     """
-    fname = get_sim_folder() + make_sim_name(freq) + '.shd'
+    fname = get_sim_folder(conf.proj_root) + make_sim_name(freq) + '.shd'
     [x,x,x,x, pos, pfield] = read_shd(fname)
     pfield = np.squeeze(pfield)
     return pfield, pos
 
-def load_super_replicas(freqs):
+def load_super_replicas(freqs, conf):
     """
     For multi-frequency coherent processing,
     I need to stack my replicas into a 'supervector'
@@ -49,44 +53,58 @@ def load_super_replicas(freqs):
     Output 
     """ 
     num_freqs = len(freqs)
-    pfield, pos = load_replicas(freqs[0])
+    pfield, pos = load_replicas(freqs[0], conf)
     num_rcvrs, num_depths, num_ranges = pfield.shape
     super_pfield = np.zeros((num_rcvrs*num_freqs, num_depths, num_ranges), dtype=np.complex128)
     super_pfield[:num_rcvrs, :, :] = pfield[:,:,:]
     for i in range(1, num_freqs):
-        pfield, pos = load_replicas(freqs[i])
+        pfield, pos = load_replicas(freqs[i], conf)
         super_pfield[i*num_rcvrs:(i+1)*num_rcvrs, :, :] = pfield[:,:,:]
     return super_pfield, pos
 
-def load_range_super_replicas(freq, num_range_stack):
+def load_range_super_replicas(freq, conf):
     """
     For multi-range coherent processing,
     I need to stack my replicas into a 'supervector'
     Pick out replicas at lambda / 2
     Stack them.
+    Dealing with the edge is annoying...
     Input 
     freq - int
-    num_range_stack - int 
-        number of ranges used in stacking
+    conf - ExpConf object
     Output 
     """ 
-    pfield, pos = load_replicas(freq)
+    num_range_stack = conf.num_ranges
+    pfield, pos = load_replicas(freq, conf)
     num_rcvrs, num_depths, num_ranges = pfield.shape
     super_pfield = 1e-17*np.ones((num_rcvrs*num_range_stack, num_depths, num_ranges), dtype=np.complex128)
     lam = 1500 / freq
-    replica_dr = source_vel * fft_spacing/fs
+    replica_dr = conf.source_vel * conf.fft_spacing/conf.fs
     stride = int(lam/2 / replica_dr)
     print('stride', stride)
     for i in range(num_range_stack):
         rel_pfield = pfield[:,:,i*stride:]
+        if i == 0:
+            min_pfield_len = rel_pfield.shape[2]
+        else:
+            if rel_pfield.shape[2]<min_pfield_len:
+                min_pfield_len = rel_pfield.shape[2] 
         super_pfield[i*num_rcvrs:(i+1)*num_rcvrs,:,:rel_pfield.shape[2]] = rel_pfield
+    super_pfield = super_pfield[:,:,:min_pfield_len]
+    pos.r.range = pos.r.range[:min_pfield_len]
     return super_pfield, pos
 
-def plot_single_snapshot_amb(pos, tvals, bartlett, int_id, fig_leaf):
+def plot_single_snapshot_amb(pos, tvals, bartlett, int_id, fig_leaf, conf):
     """ Ploat the ambiguity surface on db scale
     and save figure to pics/ with the integer id
     """
+    r0 = conf.r0
+    source_vel = conf.source_vel
+    fig_folder = conf.fig_folder
+    SNR = conf.SNR
+    zs = conf.zs 
     fig = plt.figure()
+    
     print('bartlett_max', np.max(abs(bartlett)), fig_leaf)
     b_db = np.log10(abs(bartlett)/np.max(abs(bartlett)))
     max_loc = get_max_locs(b_db)
@@ -105,7 +123,7 @@ def plot_single_snapshot_amb(pos, tvals, bartlett, int_id, fig_leaf):
     plt.close(fig)
     return
 
-def plot_amb_series(pos, tvals, bf_out, fig_leaf):
+def plot_amb_series(pos, tvals, bf_out, fig_leaf, conf):
     """
     Plot the sequence of ambiguity surfaces for 
     a beamformer
@@ -122,7 +140,7 @@ def plot_amb_series(pos, tvals, bf_out, fig_leaf):
     """
     for i in range(tvals.size):
         curr_out = bf_out[:,:,i]
-        plot_single_snapshot_amb(pos, tvals, curr_out, i, fig_leaf)
+        plot_single_snapshot_amb(pos, tvals, curr_out, i, fig_leaf, conf)
     return
 
 def bartlett(K_samp, pfield):
@@ -161,38 +179,32 @@ def bartlett(K_samp, pfield):
         output[:,:,i] = power# there might be a  complex part from roundoff err.
     return output
 
-def get_bartlett_name(freq,sim_iter, proj_root=PROJ_ROOT):
+def get_bartlett_name(freq,sim_iter, proj_root):
     fname = proj_root + str(freq) + 'bartlett_' + str(sim_iter) + '.npy'
     return fname
 
-def get_super_bartlett_name(sim_iter, proj_root=PROJ_ROOT, phase_key='naive'):
+def get_super_bartlett_name(sim_iter, proj_root, phase_key='naive'):
     fname = proj_root + 'super_bart_' + phase_key + '_' + str(sim_iter) + '.npy'
     return fname
 
-def get_range_super_bartlett_name(freq, num_ranges, sim_iter, proj_root=PROJ_ROOT):
+def get_range_super_bartlett_name(freq, num_ranges, sim_iter, proj_root):
     fname = proj_root + 'range_super_bart_' + str(freq) + '_' + str(num_ranges) + '_' + str(sim_iter) +  '.npy'
     return fname
 
-def get_amb_surf(freq, sim_iter):
-    pfield, pos = load_replicas(freq)
-    tvals, K_samp = load_cov(freq, sim_iter)
+def get_amb_surf(freq, conf, sim_iter, super_type):
+    proj_root = conj.proj_root
+    pfield, pos = load_replicas(freq, conf)
+    tvals, K_samp = load_cov(freq, sim_iter, proj_root, super_type)
     output = bartlett(tvals, K_samp, pfield, pos, str(freq) + '_')
-    fname = get_bartlett_name(freq, sim_iter)
+    fname = get_bartlett_name(freq, sim_iter, proj_root)
     np.save(fname, output)
     b_db = np.log10(abs(output)/np.max(abs(output)))
     return b_db
 
-def load_bartlett(freq, sim_iter=0, proj_root=PROJ_ROOT):
+def load_bartlett(freq, sim_iter, proj_root):
     fname =  get_bartlett_name(freq, sim_iter, proj_root)
     x = np.load(fname)
     return x
-
-def get_super_bart(phase_key):
-    tvals, super_samp = load_super_cov(phase_key=phase_key)
-    output = bartlett(tvals, super_samp, pfield, pos, save_id=phase_key + '_')
-    fname = get_super_bartlett_name(phase_key=phase_key)
-    np.save(fname, output)
-    return output
 
 def get_range_super_bart(freq, num_ranges):
     pfield, pos = load_range_super_replicas(freq, num_ranges)
@@ -202,52 +214,28 @@ def get_range_super_bart(freq, num_ranges):
     np.save(fname, output)
     return output
 
-def get_incoh_name(sim_iter, proj_root=PROJ_ROOT):
+def get_incoh_name(sim_iter, proj_root):
     return proj_root+'incoh_bartlett' + '_' + str(sim_iter) + '.npy'
 
-def incoh_bart(freqs, sim_iter):
-    """ Form an incoherent db summation
-    of the ambiguity surfaces of the different 
-    frequencies """
+def get_mc_name(freq, proj_root):
+    return proj_root + str(freq) +'_mcout.pickle'
 
-    f0 = freqs[0]
-    x0 = load_bartlett(f0)
-    pfield, pos = load_replicas(f0)
-    pfield = 0
-    tvals, K_samp = load_cov(f0)
-    incoh_sum = np.zeros(x0.shape)
-    x0_db = 10*np.log10(abs(x0)/np.max(abs(x0), axis=(0,1)))
-    incoh_sum += x0_db
-    for f in freqs:
-        tmp = load_bartlett(f, sim_iter)
-        tmp_db = 10*np.log10(abs(tmp)/np.max(abs(tmp),axis=(0,1)))
-        incoh_sum += tmp_db
-    incoh_sum /= len(freqs)
-    fname = get_incoh_name()
-    np.save(fname, incoh_sum)
+def load_mc(freq, proj_root):
+    name = get_mc_name(freq, proj_root)
+    with open(name, 'rb') as f:
+        mc_out = pickle.load(f)
+    return mc_out
 
-    """ Now plot it """
-    for i in range(tvals.size):
-        num_ranges = pos.r.range.size
-        max_loc = np.argmax(incoh_sum[:,:,i])
-        max_depth = max_loc // num_ranges
-        max_range = max_loc % num_ranges
-        fig = plt.figure()
-        levels = np.linspace(-20, 0, 10)
-        CS = plt.contourf(pos.r.range, pos.r.depth, incoh_sum[:,:,i], levels=levels)
-        plt.plot([r0 + source_vel*tvals[i]], [zs], 'b+')
-        plt.plot(pos.r.range[max_range], pos.r.depth[max_depth], 'r+')
-        plt.colorbar()
-        plt.savefig(fig_folder + '/incoh_sum_' + str(i).zfill(3) +'.png')
-        plt.close(fig)
-    return incoh_sum
-
-def get_mc_name(freq, proc_key):
-    return proj_root + str(freq) + '_' + proc_key + '_mcout.pickle'
-    
+def get_pos_from_loc(pos, max_locs):
+    """
+    From the max_locs array which indexs the pos,
+    get the range and depth array """
+    ranges = pos.r.range[max_locs[1,:]]
+    depths = pos.r.depth[max_locs[0,:]]
+    return ranges, depths
 
 class MCOutput:
-    def __init__(self, freq,  tvals, true_range, true_depth, pos, SNR, num_realizations, sim_outputs, proc_key):
+    def __init__(self, freq, tvals, pos, conf, sim_outputs):
         """
         Save output of Monte Carlo simulation
         Input -
@@ -255,44 +243,58 @@ class MCOutput:
             source freq
         tvals - np 1darray
             time value at start of each snapshot 
-        true_range - np 1darray
-            position at the beginning of each snapshot (meters)
-        true_depth - float
-            depth of source
         pos - Pos object 
             each position in Pos is a replica location
-        SNR - float (or potentially int)
-            SNR of the realizations (see config)
-        num_realizations - int
-            number of simulation runs 
+        conf - ExpConf object
+            all the sim settings
         sim_outputs - list of SimOutput objs
             save the tracking results of the simulation runs
         """
         self.freq = freq
         self.tvals = tvals
-        self.true_range = true_range
-        self.true_depth = true_depth
+        self.true_range = conf.r0 + conf.source_vel*tvals
+        self.true_depth = conf.zs
         self.pos = pos
-        self.SNR = SNR
-        self.num_realizations = num_realizations
+        self.SNR = conf.SNR
+        self.num_realizations = conf.num_realizations
         self.sim_outputs = sim_outputs
-        self.proc_key= proc_key
+        self.conf = conf
         return
 
     def save(self):
         """
         Save pickled version of self 
         """
-        name = get_mc_name(self.freq, self.proc_key)
+        name = get_mc_name(self.freq, self.conf.proj_root)
         with open(name, 'wb') as f:
             pickle.dump(self, f)
         return
 
-def get_sim_out_name(sim_iter, proj_root=PROJ_ROOT):
+    def sim_compare(self, proc_key):
+        num_points = self.true_range.size
+        num_points -= 1
+        print(num_points)
+        true_range = self.true_range[:-1]
+        true_depth = self.true_depth
+        sim_outputs = [x for x in self.sim_outputs if x.proc_key == proc_key]
+        pos = self.pos
+        colors = cm.rainbow(np.linspace(0,1,num_points))
+        fig = plt.figure()
+        for i in range(num_points):
+            plt.scatter(true_range[i], true_depth, color=colors[i])
+        marker = itertools.cycle((',', '+', '.', 'o', '*')) 
+        for i, sim in enumerate(sim_outputs): 
+            max_locs = sim.max_locs
+            r, z = get_pos_from_loc(pos, max_locs)
+            for j in range(num_points):
+                plt.scatter(r[j], z[j], color=colors[j], marker=next(marker))
+        plt.savefig(proc_key + '.png')
+        
+def get_sim_out_name(sim_iter, proj_root):
     return proj_root + 'sim_output_'+str(sim_iter) + '.pickle'
 
 class SimOutput:
-    def __init__(self, sim_iter, max_locs):
+    def __init__(self, sim_iter, max_locs, proc_key, **kwargs):
         """
         Save output of a single simulation run 
         Input 
@@ -307,9 +309,12 @@ class SimOutput:
         """
         self.sim_iter = sim_iter    
         self.max_locs = max_locs
+        self.proc_key = proc_key
+        if proc_key == 'wnc':
+            self.wn_gain = kwargs['wn_gain']
         return
 
-    def save(self, proj_root=PROJ_ROOT):
+    def save(self, proj_root):
         name = get_sim_out_name(self.sim_iter, proj_root)
         with open(name, 'wb') as f:
             pickle.dump(self, f)
@@ -350,7 +355,7 @@ def get_fig_leaf(freq, sim_iter, proc, fig_root):
         os.mkdir(fig_root + fig_leaf)
     return fig_leaf
     
-def MCBartlett(freq):
+def MCBartlett(freq, conf):
     """
     Run Bartlett on the realizations of the dvecs
     Save a MCOutput object
@@ -360,41 +365,69 @@ def MCBartlett(freq):
     Output
     mc_out - MCOutput obj
     """
+    source_vel = conf.source_vel
     sim_outs = []
-    plt.figure()
-    for sim_iter in range(num_realizations):
-        pfield, pos = load_replicas(freq)
-        stride = int(dr // ship_dr)
+    wn_gain = -2
+
+    for sim_iter in range(conf.num_realizations):
+        pfield, pos = load_replicas(freq, conf)
+        stride = int(conf.dr // conf.ship_dr)
         pfield = pfield[:,:,::stride]
         print('stride', stride, 'pfield dims', pfield.shape)
         pos.r.range = pos.r.range[::stride]
-        tvals, K_samp = load_cov(freq, sim_iter)
+    
+        """ Naive covariance """
+        tvals, K_samp = load_cov(freq, sim_iter, conf.proj_root, 'none')
+
         output = bartlett(K_samp, pfield)
-        fig_leaf = get_fig_leaf(freq, sim_iter, 'bart', fig_folder)
-        plot_amb_series(pos, tvals, output, fig_leaf)
-        #output = run_wnc(K_samp, pfield, -2)
-        #fig_leaf = get_fig_leaf(freq, sim_iter, 'wnc', fig_folder)
-        #plot_amb_series(pos, tvals, output, fig_leaf)
+        #fig_leaf = get_fig_leaf(freq, sim_iter, 'bart', conf.fig_folder)
+        #plot_amb_series(pos, tvals, output, fig_leaf, conf)
         max_locs = get_max_locs(output)
-        #best_depth = pos.r.depth[max_locs[0,:]]
-        #best_range = pos.r.range[max_locs[1,:]]
-        #plt.plot(tvals, best_range, color='g')
-        sim_out = SimOutput(sim_iter, max_locs)
-        sim_outs.append(sim_out)
-    true_range = r0 + source_vel*tvals
-    true_depth = zs
-    mc_out = MCOutput(tvals, true_range, true_depth, pos, SNR, num_realizations, sim_outs, 'wnc')
+        bart_out = SimOutput(sim_iter, max_locs, 'bart')
+    
+        output = lookup_run_wnc(K_samp, pfield, -2)
+        #output = run_wnc(K_samp, pfield, -2)
+        #fig_leaf = get_fig_leaf(freq, sim_iter, 'wnc', conf.fig_folder)
+        #plot_amb_series(pos, tvals, output, fig_leaf, conf)
+        max_locs = get_max_locs(output)
+        kwargs = {'wn_gain' : wn_gain}
+        wnc_out = SimOutput(sim_iter, max_locs, 'wnc', **kwargs)
+
+        sim_outs.append(bart_out)
+        sim_outs.append(wnc_out)
+
+
+        """ Range covariance """
+        pfield, pos = load_range_super_replicas(freq, conf)
+        pfield = pfield[:,:,::stride]
+        pos.r.range = pos.r.range[::stride]
+        kwargs = {'num_ranges':conf.num_ranges, 'phase_key': 'source_correct'}
+        tvals, K_samp = load_cov(freq, sim_iter, conf.proj_root, 'range', **kwargs)
+        output = bartlett(K_samp, pfield)
+        max_locs = get_max_locs(output)
+        bart_out = SimOutput(sim_iter, max_locs, 'bart_range')
+    
+        output = lookup_run_wnc(K_samp, pfield, -2)
+        max_locs = get_max_locs(output)
+        kwargs = {'wn_gain' : wn_gain}
+        wnc_out = SimOutput(sim_iter, max_locs, 'wnc_range', **kwargs)
+
+        sim_outs.append(bart_out)
+        sim_outs.append(wnc_out)
+    mc_out = MCOutput(freq, tvals, pos, conf, sim_outs)
     mc_out.save()
     return
         
 
 if __name__ == '__main__':
     now = time.time()
-#
-    for freq in freqs:
+
+    exp_id = 0
+    exp_conf = load_config(exp_id)
+    for freq in exp_conf.freqs:
         print('freq', freq)
         #get_amb_surf(freq)
-        MCBartlett(freq)
+        MCBartlett(freq, exp_conf)
         sys.exit(0)
 #
 #    incoh_bart(freqs)
