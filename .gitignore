@@ -1,3 +1,5 @@
 at_files/*
 *.swp
 *.npy
+pics/*
+confs/*
