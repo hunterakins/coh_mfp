@@ -54,6 +54,3 @@ for freq in freqs:
         #fig_leaf = get_fig_leaf(freq, i, 'bart_range', local_root)
         #print(local_root + fig_leaf)
        #os.system('ffmpeg -loglevel quiet -r 5 -f image2 -s 1920x1080 -i ' + local_root+ fig_leaf + '%03d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p '+ local_root + fig_leaf + str(freq)+'.mp4')
-#
-#
-
