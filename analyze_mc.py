@@ -16,9 +16,11 @@ Date:
 
 Author: Hunter Akins
 
-cnstitution: UC San Diego, Scripps Institution of Oceanography
+Institution: UC San Diego, Scripps Institution of Oceanography
 
 '''
+
+
 
 if __name__ == '__main__':
     exp_id = sys.argv[1]
@@ -27,12 +29,11 @@ if __name__ == '__main__':
     freq = conf.freqs[0]
     
     mc_out = load_mc(freq, proj_root)
-    range_super = [x for x in mc_out.sim_outputs if x.proc_key == 'wnc_range']
-    print(len(mc_out.sim_outputs))
-    print(range_super)
-    print(range_super[0].max_locs)
-    mc_out.sim_compare('bart')
-    mc_out.sim_compare('wnc')
-    mc_out.sim_compare('bart_range')
-    mc_out.sim_compare('wnc_range')
+    #range_super = [x for x in mc_out.sim_outputs if x.proc_key == 'wnc_range']
+    #mc_out.make_track_plot('bart')
+    mc_out.make_realiz_scatter('bart')
+    #mc_out.make_track_plot('wnc')
+    mc_out.make_realiz_scatter('bart_range')
+    #mc_out.make_track_plot('wnc_range')
+
 

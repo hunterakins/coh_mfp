@@ -41,9 +41,7 @@ for freq in exp_conf.freqs:
         #make_range_super_cov_mat_seq(freq, cov_int_time, sim_iter, proj_root, phase_key='source_correct', num_ranges=num_ranges)
         make_cov_mat_seq([freq], cov_int_time, sim_iter, exp_conf, 'none')
         kwargs = {'num_ranges':exp_conf.num_ranges, 'phase_key':'source_correct'}
+        #cov_int_time /= exp_conf.num_ranges # to have equiv number of data...
         make_cov_mat_seq([freq], cov_int_time, sim_iter, exp_conf, 'range', **kwargs)
     MCBartlett(freq, exp_conf)
-
-
-
 

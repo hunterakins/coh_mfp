@@ -175,8 +175,12 @@ def get_K_samp(dvecs, num_frames, frame_len):
     K_samp = np.zeros((num_rcvrs, num_rcvrs, num_frames), dtype=np.complex128)
     """ Iterate through frames and add sample covs to the mat """
     for i in range(num_frames):
-        inds = slice(i*frame_len, (i+1)*frame_len)
-        tmp_K = np.cov(dvecs[:,inds])
+        if frame_len > 1:
+            inds = slice(i*frame_len, (i+1)*frame_len)
+            tmp_K = np.cov(dvecs[:,inds])
+        else:
+            tmp_dvec = dvecs[:,i] - np.mean(dvecs[:,i])
+            tmp_K = np.outer(tmp_dvec, tmp_dvec)
         K_samp[:,:,i] = tmp_K
     return K_samp
 
@@ -230,6 +234,7 @@ def make_cov_mat_seq(freqs,cov_int_time, sim_iter, conf, super_type, **kwargs):
     tgrid = load_tgrid(proj_root) # time stamps associated with beginning of fft windows
 
     frame_len = get_frame_len(cov_int_time, conf.fft_spacing, conf.fs)
+    print('frame_len', frame_len)
     num_frames = get_num_frames(tgrid, frame_len)
 
     if super_type=='none':

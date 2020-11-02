@@ -44,17 +44,16 @@ for key in proc_keys:
     copy_fig(key, local_folder)
     os.system('xdg-open ' + local_folder + key+'.png')
 
-#for freq in freqs:
-#    local_root = local_folder
-#    os.system('rsync -r fakins@tscc-login.sdsc.edu:' +fig_folder + ' ' + local_root)
-#    for i in range(num_realizations):
-#        fig_leaf = get_fig_leaf(freq, i, 'bart', local_root)
-#        print(local_root + fig_leaf)
-#        #os.chdir('pics/' + fig_leaf)
-#        #os.system('ffmpeg -loglevel quiet -r 5 -f image2 -s 1920x1080 -i ' + local_root+ fig_leaf + '%03d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p '+ local_root + fig_leaf + str(freq)+'.mp4')
-#        fig_leaf = get_fig_leaf(freq, i, 'bart_range', local_root)
-#        print(local_root + fig_leaf)
+for freq in freqs:
+    local_root = local_folder
+    os.system('rsync -r fakins@tscc-login.sdsc.edu:' +fig_folder + ' ' + local_root)
+    #for i in range(num_realizations):
+    #    fig_leaf = get_fig_leaf(freq, i, 'bart', local_root)
+        #os.chdir('pics/' + fig_leaf)
         #os.system('ffmpeg -loglevel quiet -r 5 -f image2 -s 1920x1080 -i ' + local_root+ fig_leaf + '%03d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p '+ local_root + fig_leaf + str(freq)+'.mp4')
+        #fig_leaf = get_fig_leaf(freq, i, 'bart_range', local_root)
+        #print(local_root + fig_leaf)
+       #os.system('ffmpeg -loglevel quiet -r 5 -f image2 -s 1920x1080 -i ' + local_root+ fig_leaf + '%03d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p '+ local_root + fig_leaf + str(freq)+'.mp4')
 #
 #
 
