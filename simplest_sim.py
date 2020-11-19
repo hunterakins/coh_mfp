@@ -31,6 +31,8 @@ def add_noise(p_true, snr_db):
     noise_vec = np.sqrt(noise_var/2)* np.random.randn(p_true.size) + complex(0,1)*np.sqrt(noise_var/2)*np.random.randn(p_true.size)
     noise_vec = noise_vec.reshape(p_true.shape)
     mat = np.outer(noise_vec, noise_vec.conj())
+    plt.figure()
+    plt.imshow(abs(mat))
     print(np.mean(np.square(abs(noise_vec))), mean_pow)
     p_true = p_true + noise_vec
     return p_true
@@ -72,8 +74,8 @@ def get_mvdr_amb_surf(r, z, K_true, replicas):
     for i in range(z.size):
         for j in range(r.size):
             replica = replicas[:,i,j]
-            denom = replica.T.conj()@K_true_inv@replica
-            amb_surf[i,j] = 1/abs(denom)
+            denom = (replica.T.conj()@K_true_inv@replica).real
+            amb_surf[i,j] = 1/denom
     amb_surf /= np.max(abs(amb_surf))
     amb_surf = 10*np.log10(abs(amb_surf))
     return amb_surf
