@@ -33,17 +33,14 @@ def add_noise(p_true, snr_db):
     mat = np.outer(noise_vec, noise_vec.conj())
     plt.figure()
     plt.imshow(abs(mat))
-    print(np.mean(np.square(abs(noise_vec))), mean_pow)
     p_true = p_true + noise_vec
     return p_true
 
 def add_noise_cov(p_true, snr_db):
     mean_pow = np.mean(np.square(abs(p_true)))
     noise_var = mean_pow/(np.power(10, snr_db/10))
-    print(mean_pow, noise_var)
     #noise_vec = np.sqrt(noise_var/2)* np.random.randn(p_true.size) + complex(0,1)*np.sqrt(noise_var/2)*np.random.randn(p_true.size)
     #noise_vec = noise_vec.reshape(p_true.shape)
-    #print(np.mean(np.square(abs(noise_vec))), mean_pow)
     K_true = np.outer(p_true, p_true.conj())
     noise_K = noise_var*np.identity(p_true.size)  #+ complex(0,1)*noise_var/2 * np.identity(p_true.size)
     return K_true+noise_K
@@ -57,19 +54,25 @@ def get_amb_surf(r, z, K_true, replicas):
             replica= replica.reshape(replica.size, 1)
             out = replica.T.conj()@K_true@replica
             amb_surf[i,j] = abs(out)
+    max_val = np.max(amb_surf)
     amb_surf /= np.max(amb_surf)
     amb_surf = 10*np.log10(amb_surf)
-    return amb_surf
+    return amb_surf, max_val
 
 def get_mvdr_amb_surf(r, z, K_true, replicas):
     amb_surf = np.zeros((z.size, r.size))
     cond_num = np.linalg.cond(K_true)
-    if cond_num > 1e6:
-        s, v = np.linalg.eigh(K_true)
-        max_eig = s[-1]
-        eps = max_eig * 1e-6
-        print('covariance matrix is ill-conditioned, regularizing before inversion')
+    eps = 1e-12
+    loop_count = 0
+    while cond_num > 1e9:
+        print('covariance matrix is ill-conditioned, regularizing before inversion', cond_num)
         K_true += eps*np.identity(K_true.shape[0])
+        cond_num = np.linalg.cond(K_true)
+        print('new cond num', cond_num)
+        loop_count += 1
+        if loop_count % 10 == 0:
+            eps = eps*10
+            print('increasing epsilon', eps)
     K_true_inv = np.linalg.inv(K_true)
     for i in range(z.size):
         for j in range(r.size):
@@ -86,10 +89,14 @@ def plot_amb_surf(db_lev, r, z, amb_surf, title_str, r_true, zs, show=False):
     plt.contourf(r, z, amb_surf, levels=levels, extend='both')
     plt.colorbar()
     plt.scatter(r_true, zs, zs, marker='+', color='r')
+    ind = np.argmax(amb_surf)
+    inds = (ind % r.size, int(ind // r.size))
+    plt.scatter(r[inds[0]], z[inds[1]], marker='+', color='b')
     plt.gca().invert_yaxis()
     fig.suptitle(title_str)
     if show == True:
         plt.show()
+    return fig
 
 def mvdr_quick_plot(r, z, K_true, replicas, db_scale, title_str, r_true, zs):
     output = get_mvdr_amb_surf(r, z, K_true, replicas)
@@ -136,8 +143,8 @@ def quick_plot_suite(r, z, K_true, replicas, db_scale, title_str, r_true, zs):
 if __name__ == '__main__':
 
     start_time = time.time()
-    freq = 150
-    num_rcvrs = 15
+    freq = 50
+    num_rcvrs = 2
     zr = np.linspace(50, 200, num_rcvrs)
     zs = 50
 
@@ -174,9 +181,9 @@ if __name__ == '__main__':
     K_tmp = add_noise_cov(p_true, snr_db)
     K_true = K_tmp
     print('Reshaping K_true to hae a time axis')
-    K_true=K_true.reshape(K_true.shape[0], K_true.shape[1], 1)
+    K_true=K_true.reshape(1, K_true.shape[0], K_true.shape[1])
     
-    output = lookup_run_wnc(K_true.reshape(K_true.shape[0], K_true.shape[1], 1), replicas, -1)
+    #output = lookup_run_wnc(K_true, replicas, -1)
     #p_true = add_noise(p_true, snr_db)
     #K_true = np.outer(p_true, p_true.conj())
 
@@ -188,7 +195,6 @@ if __name__ == '__main__':
     output = run_mcm(K_true,r_list)
     output = output[:,:,0]
     output = 10*np.log10(abs(output) / np.max(abs(output)))
-    print(output.shape)
     #plot_amb_surf(-10, pos.r.range[1:-1], pos.r.depth[1:-1],  output, 'mcm', r0, zs)
 
 
@@ -207,7 +213,7 @@ if __name__ == '__main__':
     synth_p_true = deepcopy(synth_p_true)
     synth_K_true =add_noise_cov(synth_p_true, snr_db)
     print('Reshaping K_true to hae a time axis')
-    synth_K_true=synth_K_true.reshape(synth_K_true.shape[0], synth_K_true.shape[1], 1)
+    synth_K_true=synth_K_true.reshape(1, synth_K_true.shape[0], synth_K_true.shape[1])
     #synth_p_true = add_noise(synth_p_true, snr_db)
     #synth_K_true = np.outer(synth_p_true, synth_p_true.conj())
 

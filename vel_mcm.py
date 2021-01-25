@@ -60,7 +60,7 @@ def check_constraint_points(v_grid, T, kbar, num_synth_els, ship_dr):
     plt.show()
     return
 
-def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els):
+def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname):
     synth_dr = v*T
     og_r = np.arange(rmin, rmax+ grid_dr, grid_dr)
     for i in range(num_synth_els):
@@ -72,44 +72,53 @@ def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els):
     synth_replicas /= np.linalg.norm(synth_replicas , axis=0)
     return og_r, pos.r.depth, synth_replicas
 
-def mcm_plot(K_true, r_arr, db_down, look_ind, r, z, r0, zs):
+def mcm_plot(K_true, r_arr, db_down, look_ind, r, z, rs, zs):
     output = run_wnc_mcm(K_true.reshape(1, K_true.shape[0], K_true.shape[1]), r_arr, db_down, look_ind=look_ind)
     output= 10*np.log10(abs(output) / np.max(output))
     output = output[0,:,:]
-    plot_amb_surf(-5, r, z, output, 'mcm wnc ' + str(db_down), r0, zs, show=True)
+    plot_amb_surf(-5, r, z, output, 'mcm wnc ' + str(db_down), rs, zs, show=True)
 
-def mcm_mvdr_comp(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, K_true, f_err=0):
+def mcm_mvdr_comp(env, rmin, rmax, grid_dr, r0, v_grid, T, num_synth_els, K_true, folder, fname,rs, zs, f_err=0):
+    """
+    Compare MCM and MVDR processor, using assumed source velocity as constraint points
+    Input 
+    env
+    """ 
+    K_true = K_true.reshape(1, K_true.shape[0], K_true.shape[1])
+    wn_gain = -3
     fig, axis = plt.subplots(1,1)
-    plt.suptitle('Compare MCM and MVDR output at the correct source depth')
+    plt.suptitle('Compare MCM and WNC output at the correct source depth')
     axis.set_xlabel('Range (m)')
-    axis.set_ylabel('MVDR output (dB)')
+    axis.set_ylabel('WNC output (dB)')
     for i, v in enumerate(v_grid):
-        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els)
+        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname)
+        print('synth dr in func ', v*T)
         if i == 0:
             r_arr = np.zeros((len(v_grid), num_synth_els*env.zr.size, z.size, r.size), dtype=np.complex128)
         synth_replicas = add_f_err(synth_replicas, num_synth_els, T, env.freq, env.freq+f_err)
-        r_arr[i,:,:,:] = synth_replicas[:,:,:]
+        r_arr[i,...] = synth_replicas[...]
         z_ind = np.argmin(np.array([abs(zs- x) for x in z]))
         #output = get_amb_surf(r, z, K_true, synth_replicas)
-        #plot_amb_surf(-5, r, z, output, 'bartlett, v = ' + str(v), r0, zs)
-        output = get_mvdr_amb_surf(r, z, K_true, synth_replicas)
-        #plot_amb_surf(-5, r, z, output, 'mvdr, v = ' + str(v), r0, zs)
-        axis.plot(r, output[z_ind, :])
-    #plt.show()
+        #plot_amb_surf(-5, r, z, output, 'bartlett, v = ' + str(v), rs, zs)
+        mvdr = run_wnc(K_true, synth_replicas, wn_gain)
+        mvdr = mvdr[0,...]
+        mvdr = 10*np.log10(abs(mvdr)/np.max(mvdr))
+        #plot_amb_surf(-10, r, z, mvdr, 'g, v = ' + str(v), rs, zs)
+        axis.plot(r, mvdr[z_ind, :])
     num_constraints = len(v_grid)
     look_ind = int(num_constraints // 2) 
     print('look ind', look_ind)
 
-    output = run_mcm(K_true.reshape(1, K_true.shape[0], K_true.shape[1]), r_arr, look_ind=look_ind)
-    output = output[0, :,:]  
-    output = 10*np.log10(abs(output)/np.max(output))
-
-    axis.plot(r, output[z_ind,:])
-    axis.legend([str(x)[:4]+ ' m /s assumed speed' for x in v_grid] + ['MCM'])
+    leg = [str(x)[:4]+ ' m /s assumed speed' for x in v_grid]
+    if num_synth_els > 1:
+        mcm = run_wnc_mcm(K_true,r_arr, wn_gain, look_ind=look_ind)
+        mcm = mcm[0,...]  
+        mcm = 10*np.log10(abs(mcm)/np.max(mcm))
+        axis.plot(r, mcm[z_ind,:])
+        plot_amb_surf(-10, r, z, mcm, 'mcm', rs, zs)
+        leg += ['MCM']
+    axis.legend(leg)
     
-    plot_amb_surf(-5, r, z, output, 'mcm', r0, zs)
-
-
     plt.show()
    
 def add_f_err(replicas, num_synth_els, T, f_true, f_assumed):
@@ -121,7 +130,7 @@ def add_f_err(replicas, num_synth_els, T, f_true, f_assumed):
         replicas[i*zr_size:(i+1)*zr_size,:,:] *= multiplier
     return replicas
     
-def examine_f_sens(env, rmin, rmax, grid_dr, v, T, num_synth_els, K_true, zs, r0):
+def examine_f_sens(env, rmin, rmax, grid_dr, v, T, num_synth_els, K_true, zs, rs, folder, fname):
     f_true = env.freq 
     b_vals = []
     df_db_down = 1.9 / (T*num_synth_els) / np.pi
@@ -130,15 +139,14 @@ def examine_f_sens(env, rmin, rmax, grid_dr, v, T, num_synth_els, K_true, zs, r0
     f_vals = np.linspace(f_min, f_max, 40)
     plt.figure() 
     for f_assumed in f_vals:
-        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els)
-        r_ind = np.argmin(np.array([abs(r0 - x) for x in r]))
+        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder,fname)
+        r_ind = np.argmin(np.array([abs(rs - x) for x in r]))
         z_ind = np.argmin(np.array([abs(zs- x) for x in z]))
         synth_replicas = add_f_err(synth_replicas, num_synth_els, T, f_true, f_assumed)
         synth_rep = synth_replicas[:, z_ind, r_ind]
         synth_rep /= np.linalg.norm(synth_rep)
         #output = get_amb_surf(r, z, K_true, synth_replicas)
         output = synth_rep.T.conj()@K_true@synth_rep
-        print(output.imag)
         output = output.real
         b_vals.append(output)
 
@@ -148,27 +156,26 @@ def examine_f_sens(env, rmin, rmax, grid_dr, v, T, num_synth_els, K_true, zs, r0
     f_vals = np.linspace(f_min, f_max, 10)
     c_vals = []
     for f_assumed in f_vals:
-        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els)
-        r_ind = np.argmin(np.array([abs(r0 - x) for x in r]))
+        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder_fname)
+        r_ind = np.argmin(np.array([abs(rs - x) for x in r]))
         z_ind = np.argmin(np.array([abs(zs- x) for x in z]))
         synth_replicas = add_f_err(synth_replicas, num_synth_els, T, f_true, f_assumed)
         synth_rep = synth_replicas[:, z_ind, r_ind]
         synth_rep /= np.linalg.norm(synth_rep)
         #output = get_amb_surf(r, z, K_true, synth_replicas)
         output = synth_rep.T.conj()@K_true@synth_rep
-        print(output.imag)
         output = output.real
         c_vals.append(output)
     plt.scatter(f_vals, c_vals, color='r')
 
-def get_r_arr(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, f_err):
+def get_r_arr(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, folder, fname, f_err=0):
     """
     For the environment, generate array of replicas
     First axis is constraint point, second is receiver index, third
     is depth, fourth is range 
     """
     for i, v in enumerate(v_grid):
-        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els)
+        r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname)
         if i == 0:
             r_arr = np.zeros((len(v_grid), num_synth_els*env.zr.size, z.size, r.size), dtype=np.complex128)
         synth_replicas = add_f_err(synth_replicas, num_synth_els, T, env.freq, env.freq+f_err)
@@ -176,7 +183,7 @@ def get_r_arr(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, f_err):
         r_arr[i,:,:,:] = synth_replicas[:,:,:]
     return r, z, r_arr
 
-def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, K_true, snr, f_err=0):
+def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, K_true, snr, rs, zs,f_err=0):
     """ 
     Compare bartlett to MCM and MVDR for synthetic aperture
     """
@@ -185,7 +192,8 @@ def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, 
     """ 
     Produce Bartlett 
     """
-    r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v, T, num_synth_els)
+    r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v, T, num_synth_els, folder, fname)
+    print('new k', env.modes.k)
     bart = get_amb_surf(r, z, K_true, synth_replicas)
 
     """ 
@@ -193,7 +201,7 @@ def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, 
     """
 
 
-    r, z, r_arr = get_r_arr(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, f_err)
+    r, z, r_arr = get_r_arr(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, folder, fname, f_err)
 
     num_constraints= len(v_grid)
     look_ind = int(num_constraints // 2) 
@@ -231,18 +239,17 @@ def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, 
         fig.colorbar(cmesh2,ax=axes[2])
         """ Put source positions on the ambiguity surfaces """
         for i in range(3):
-            axes[i].scatter(r0, zs, color='r', marker='+', linewidth=0.5)
+            axes[i].scatter(rs, zs, color='r', marker='+', linewidth=0.5)
         plt.savefig('pics/' + str(snr) + '_snr_' + str(x) + '_dbscale.png', dpi=500, bbox_inches='tight')
     return
 
 
-
-def single_sensor_plot_comp(env, rmin, rmax, grid_dr, K_true, snr_db, f_err=0.0):
+def single_sensor_plot_comp(env, rmin, rmax, grid_dr, K_true, snr_db, folder, fname, rs, zs, f_err=0.0):
     """ 
     Just us the VLA to produce Bartlett, MVDR, and WNC
     """
     wn_gain = -3
-    r, z, tmp_replicas = form_replicas(env, rmin, rmax, grid_dr, 5, 5, 1)
+    r, z, tmp_replicas = form_replicas(env, rmin, rmax, grid_dr, 5, 5, 1, folder, fname)
     bart = get_amb_surf(r, z, K_true, tmp_replicas)
 
     mvdr = get_mvdr_amb_surf(r, z, K_true, tmp_replicas)
@@ -272,7 +279,7 @@ def single_sensor_plot_comp(env, rmin, rmax, grid_dr, K_true, snr_db, f_err=0.0)
         fig.colorbar(cmesh2,ax=axes[2])
         """ Put source positions on the ambiguity surfaces """
         for i in range(3):
-            axes[i].scatter(r0, zs, color='r', marker='+', linewidth=0.5)
+            axes[i].scatter(rs, zs, color='r', marker='+', linewidth=0.5)
         plt.savefig('pics/' + str(snr_db) + '_snr_' + str(x) + '_dbscale_VLA.png', dpi=500, bbox_inches='tight')
 
 def get_stacked_cov(synth_p_true, num_synth_els, snr_db):
@@ -287,6 +294,15 @@ def get_stacked_cov(synth_p_true, num_synth_els, snr_db):
     noise_cov = noise_var*np.identity(num_rcvrs)
     K += noise_cov
     return K
+
+def add_mismatch(env):
+    """
+    Add some environmental mismatch to the environment 
+    """
+    env.change_depth(200)
+    k = env.modes.k
+    print(k)
+    return env
     
 
 if __name__ == '__main__':
@@ -298,19 +314,19 @@ if __name__ == '__main__':
     zr = np.linspace(50, 200, num_rcvrs) # array depths
     zs = 50 # source depth
 
-    snr_db = -10
+    snr_db = 0
 
-    r0 = 1e4 # initial source range
+    r0 = 5*1e3 # initial source range
     ship_v = 5 # m/s
     T = 5# time between snapshots in synth array
     ship_dr = ship_v*T
-    num_synth_els = 10
+    num_synth_els = 3
 
 
     dz = 10
     zmax = 216.5
     grid_dr = 500
-    rmax = 2e4
+    rmax = 1e4
     env_builder = factory.create('swellex')
     env = env_builder()
     folder = 'at_files/'
@@ -338,7 +354,10 @@ if __name__ == '__main__':
     plt.figure()
     plt.imshow(abs(stacked_K))
     env.add_source_params(freq, zr, zr)
-    single_sensor_plot_comp(env, rmin, rmax, grid_dr, stacked_K, snr_db)
+
+
+    env = add_mismatch(env)
+    single_sensor_plot_comp(env, rmin, rmax, grid_dr, stacked_K, snr_db, folder, fname, r0, zs)
     
     noiseless_p = synth_p_true[:] 
     plt.figure()
@@ -365,7 +384,7 @@ if __name__ == '__main__':
     print('rmin' ,rmin)
     env.add_source_params(freq, zr, zr)
 
-    three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, K_true, snr_db, f_err=0.0)
+    three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, K_true, snr_db, r0, zs,f_err=0)
 
     print('total run time', time.time() - now)
     plt.show()
@@ -375,16 +394,16 @@ if __name__ == '__main__':
 
     #examine_f_sens(env, rmin, rmax, grid_dr, ship_v, T, num_synth_els, K_true, zs, r0)
 
-    #r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v, T, num_synth_els)
+    #r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v, T, num_synth_els, folder, fname)
     #output = get_amb_surf(r, z, K_true, synth_replicas)
     #plot_amb_surf(-5, r, z, output, 'bartlett ' + str(ship_v), r0, zs)
     #plt.show()
 
-    #r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v+1, T, num_synth_els)
+    #r, z, synth_replicas = form_replicas(env, rmin, rmax, grid_dr, ship_v+1, T, num_synth_els, folder, fname)
     #output = get_amb_surf(r, z, K_true, synth_replicas)
     #plot_amb_surf(-5, r, z, output, 'bartlett, v = ' + str(ship_v+1), r0, zs)
     #plt.show()
 
-    #mcm_mvdr_comp(env, rmin, rmax, grid_dr, v_grid, T, num_synth_els, K_true, f_err=0.0)
+    #mcm_mvdr_comp(env, rmin, rmax, grid_dr, r0, v_grid, T, num_synth_els, K_true, folder, fname, f_err=0.0)
 
 

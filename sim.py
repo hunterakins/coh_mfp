@@ -74,76 +74,34 @@ def run_sim(conf):
         env = env_builder()
         num_rcvrs = conf.zr.size
 
-        """ Run the model and get the modes and wavenumbers
-        to do a time domain simulation that neglects doppler"""
-        """ Run once to get the modes shapes on the array and the kr """
+        """ Run kraken for this specific frequency at every single r """
         folder = get_sim_folder(conf.proj_root)
         fname = make_sim_name(freq)
         env.add_source_params(freq, conf.zs, conf.zr)
         env.add_field_params(conf.dz, conf.zmax, conf.ship_dr, conf.rmax)
-        p, pos = env.run_model('kraken', folder, fname, zr_flag=True, zr_range_flag=True)
-        print(p.shape)
-        modes = read_modes(**{'fname':folder+fname+'.mod', 'freq':freq})
-        print(modes.phi.shape)
-        As = modes.phi[0,:] # extract source exctiation
-        phi = modes.phi[1:,:] # throw out source depth val
-        krs = modes.k
-        num_modes = krs.size
 
-        """ Run a second time to generate the replicas """
-        """ Put a source at each of the receiver positoins
-        reciprocity gives you the field of replicas for each source  """
-        """ Settin zs as zr is just a placeholder, it doesn't matter """
-        env.add_source_params(freq, conf.zr, [conf.zs])
-        p, pos = env.run_model('kraken', folder, fname, zr_flag=False,zr_range_flag=False)
-        print('replica dr', pos.r.range[1] - pos.r.range[0])
-        print(p.shape, 'expected shape 21 by like 40 by like ', conf.rmax/conf.ship_dr )
-
-
-
-        """ Manually compute field to get high range resolution required
-        for the time domain sim """
+        freq_contrib, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=True, zr_range_flag=False, custom_r=r)
+        """ Only a single source, so take the first entry  """
+        freq_contrib = freq_contrib[0,...]
         """ Add the source signal for this frequency to the field """
-        freq_contrib = np.zeros((conf.zr.size, r.size), dtype=np.complex128)
-        """Compute modal sum """
-        for i in range(num_modes):
-            mode_stren =  As[i]*(phi[:,i])
-            mode_range_dep = np.exp(-complex(0,1)*krs[i]*r) / np.sqrt(krs[i])
-            mode_term = mode_stren.reshape(mode_stren.size, 1) * mode_range_dep
-            freq_contrib += mode_term
-        """ Add prefactors to modal sum """
-        freq_contrib /= np.sqrt(r)
         freq_contrib *= np.exp(complex(0,1)*2*np.pi*freq*t)
-        freq_contrib *= np.exp(complex(0,1)*np.pi/4)/np.sqrt(8*np.pi)
-        freq_contrib = freq_contrib.real
+        freq_contrib = freq_contrib.real # this just sets the original phase of the signal
 
-        """ Estimate sapmle variance over time """
+        """ Estimate sample variance over time """
         power = np.square(abs(freq_contrib))
         power = np.mean(power)
         intensity_list.append(power)
         field += freq_contrib
 
 
-    """ Now add some white gaussian noise """
-    """ Recall that the variance of the DFT will be N times the 
-    variance of the noise sequence, where N is the DFT length """
-    """ We can assume all the signal variance is in a single bin """
-    mean_signal_var = np.mean(intensity_list)
-    post_fft_signal_pow = 1/3*conf.fft_len*conf.fft_len*mean_signal_var
-    intensity_ratio = np.power(10, conf.SNR/10)
-    noise_var = post_fft_signal_pow / intensity_ratio
-    sample_var = noise_var / conf.fft_len
-    noise = np.sqrt(sample_var)*np.random.randn(field.size).reshape(field.shape)
 
-    for sim_iter in range(conf.num_realizations):
-        noise = np.sqrt(sample_var)*np.random.randn(field.size).reshape(field.shape)
-        sim_data = field+noise
-        sim_name = make_raw_ts_name(sim_iter, conf.proj_root)
-        np.save(sim_name, sim_data)
+    sim_data = field
+    sim_name = make_raw_ts_name(conf.proj_root)
+    np.save(sim_name, sim_data)
     return
 
-def make_raw_ts_name(sim_iter, proj_root):
-    return proj_root + 'sim_data_' + str(sim_iter) + '.npy'
+def make_raw_ts_name(proj_root):
+    return proj_root + 'sim_data' + '.npy'
 
 if __name__ == '__main__':
     print('hi')
