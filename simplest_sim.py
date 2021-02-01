@@ -83,8 +83,10 @@ def get_mvdr_amb_surf(r, z, K_true, replicas):
     amb_surf = 10*np.log10(abs(amb_surf))
     return amb_surf
 
-def plot_amb_surf(db_lev, r, z, amb_surf, title_str, r_true, zs, show=False):
-    levels = np.linspace(db_lev, 0, 20)
+def plot_amb_surf(db_range, r, z, amb_surf, title_str, r_true, zs, show=False):
+    """
+    """
+    levels = np.linspace(db_range[0], db_range[1], 20)
     fig = plt.figure()
     plt.contourf(r, z, amb_surf, levels=levels, extend='both')
     plt.colorbar()

@@ -60,12 +60,15 @@ def check_constraint_points(v_grid, T, kbar, num_synth_els, ship_dr):
     plt.show()
     return
 
-def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname):
+def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname, adiabatic=False):
     synth_dr = v*T
     og_r = np.arange(rmin, rmax+ grid_dr, grid_dr)
     for i in range(num_synth_els):
         custom_r = og_r + synth_dr*i
-        replica, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=False, zr_range_flag=False, custom_r = custom_r)
+        if adiabatic==False:
+            replica, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=False, zr_range_flag=False, custom_r = custom_r)
+        else:
+            replica, pos = env.s5_approach_adiabatic_replicas(folder, fname, custom_r)
         if i == 0 :
             synth_replicas = np.zeros((num_synth_els*env.zr.size, env.pos.r.depth.size,  og_r.size), dtype=np.complex128)
         synth_replicas[i*(env.zr.size):(i+1)*env.zr.size, :,:] = replica

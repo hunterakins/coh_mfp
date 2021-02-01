@@ -113,7 +113,6 @@ if __name__ == '__main__':
     p_true /= np.linalg.norm(p_true)
     K_true = np.outer(p_true, p_true.conj())
     synth_replica, rep_pos =get_v_replicas(ship_v, T, env, folder, fname, num_synth_els, dz, zmax, rmax)
-    print(synth_replica.shape)
     
     rep_r_ind = np.argmin((np.array([abs(x*1e3 - r0) for x in rep_pos.r.range])))
     rep_z_ind = np.argmin((np.array([abs(zs - x) for x in rep_pos.r.depth])))
