@@ -45,17 +45,25 @@ def add_noise_cov(p_true, snr_db):
     noise_K = noise_var*np.identity(p_true.size)  #+ complex(0,1)*noise_var/2 * np.identity(p_true.size)
     return K_true+noise_K
 
-def get_amb_surf(r, z, K_true, replicas):
+def get_amb_surf(r, z, K_true, replicas, matmul=False):
     amb_surf = np.zeros((z.size, r.size))
-    for i in range(z.size):
-        for j in range(r.size):
-            replica = replicas[:,i,j]
-            #out = replica.conj().dot(K_true).dot(replica)
-            replica= replica.reshape(replica.size, 1)
-            out = replica.T.conj()@K_true@replica
-            amb_surf[i,j] = abs(out)
+    if matmul == False:
+        for i in range(z.size):
+            for j in range(r.size):
+                replica = replicas[:,i,j]
+                #out = replica.conj().dot(K_true).dot(replica)
+                replica= replica.reshape(replica.size, 1)
+                out = replica.T.conj()@K_true@replica
+                amb_surf[i,j] = abs(out)
+    else:
+        """ Get the replicas on the right side """
+        """ Replicas shape is rcvrs.size, z.size, r.size """
+        left_op = np.transpose(replicas, (1, 2,0)).conj()
+        left_prod = left_op @ K_true
+        out = np.einsum('ijk,kij->ij', left_prod, replicas)
+        amb_surf = abs(out)
     max_val = np.max(amb_surf)
-    amb_surf /= np.max(amb_surf)
+    #amb_surf /= np.max(amb_surf)
     amb_surf = 10*np.log10(amb_surf)
     return amb_surf, max_val
 
@@ -149,9 +157,7 @@ if __name__ == '__main__':
     num_rcvrs = 2
     zr = np.linspace(50, 200, num_rcvrs)
     zs = 50
-
-
-    dz = 5
+    dz = 5 
     zmax = 216.5
     dr = 25
     rmax = 1e4
@@ -178,12 +184,23 @@ if __name__ == '__main__':
     p_true = p[:,true_ind]
     r_true = pos.r.range[true_ind]
     print('r true, zs', r_true, zs)
-    snr_db = -15
+    snr_db = 10
 
     K_tmp = add_noise_cov(p_true, snr_db)
     K_true = K_tmp
     print('Reshaping K_true to hae a time axis')
-    K_true=K_true.reshape(1, K_true.shape[0], K_true.shape[1])
+    #K_true=K_true.reshape(1, K_true.shape[0], K_true.shape[1])
+
+    out2, max_val2 = get_amb_surf(pos.r.range, pos.r.depth, K_true, replicas, matmul=True)
+    out1, max_val1 = get_amb_surf(pos.r.range, pos.r.depth, K_true, replicas, matmul=False)
+    print(out2-out1)
+    plt.figure()
+    plt.plot(out2-out1)
+    db_scale = [-10, 0]
+    title_str = 'comp '
+    plot_amb_surf(db_scale, pos.r.range, pos.r.depth, out2, 'matmul' + 'bart', r_true, zs, show=False)
+    plot_amb_surf(db_scale, pos.r.range, pos.r.depth, out1, 'for loop' + 'bart', r_true, zs, show=True)
+    sys.exit(0)
     
     #output = lookup_run_wnc(K_true, replicas, -1)
     #p_true = add_noise(p_true, snr_db)
@@ -201,7 +218,7 @@ if __name__ == '__main__':
 
 
     now = time.time()
-    db_scale = -5
+    db_scale = [-10, 0]
     quick_plot_suite(pos.r.range,pos.r.depth, K_true, replicas, db_scale, 'standard ',r_true, zs)
 
     print('time elapsed' , time.time()-now)

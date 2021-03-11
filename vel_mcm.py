@@ -60,18 +60,27 @@ def check_constraint_points(v_grid, T, kbar, num_synth_els, ship_dr):
     plt.show()
     return
 
-def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname, adiabatic=False):
+def form_replicas(env, rmin, rmax, grid_dr, v, T, num_synth_els, folder, fname, adiabatic=False,tilt_angle=0):
     synth_dr = v*T
     og_r = np.arange(rmin, rmax+ grid_dr, grid_dr)
+    num_r = og_r.size
+    custom_r = og_r[:]
+
+    """ Form the range grid """
+    for i in range(1, num_synth_els):
+        tmp = og_r + synth_dr*i
+        custom_r = np.concatenate((custom_r, tmp))
+
+    """ Run the model """
+    if adiabatic==False:
+        replica, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=False, zr_range_flag=False, custom_r = custom_r, tilt_angle=tilt_angle)
+    else:
+        replica, pos = env.s5_approach_adiabatic_replicas(folder, fname, custom_r, tilt_angle=tilt_angle)
+
+    """ Stack the replicas """
+    synth_replicas = np.zeros((num_synth_els*env.zr.size, env.pos.r.depth.size,  og_r.size), dtype=np.complex128)
     for i in range(num_synth_els):
-        custom_r = og_r + synth_dr*i
-        if adiabatic==False:
-            replica, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=False, zr_range_flag=False, custom_r = custom_r)
-        else:
-            replica, pos = env.s5_approach_adiabatic_replicas(folder, fname, custom_r)
-        if i == 0 :
-            synth_replicas = np.zeros((num_synth_els*env.zr.size, env.pos.r.depth.size,  og_r.size), dtype=np.complex128)
-        synth_replicas[i*(env.zr.size):(i+1)*env.zr.size, :,:] = replica
+        synth_replicas[i*(env.zr.size):(i+1)*env.zr.size, :,:] = replica[:, :, i*num_r:(i+1)*num_r]
     synth_replicas /= np.linalg.norm(synth_replicas , axis=0)
     return og_r, pos.r.depth, synth_replicas
 
@@ -245,7 +254,6 @@ def three_plot_comp(env, rmin, rmax, grid_dr, ship_v, v_grid, T, num_synth_els, 
             axes[i].scatter(rs, zs, color='r', marker='+', linewidth=0.5)
         plt.savefig('pics/' + str(snr) + '_snr_' + str(x) + '_dbscale.png', dpi=500, bbox_inches='tight')
     return
-
 
 def single_sensor_plot_comp(env, rmin, rmax, grid_dr, K_true, snr_db, folder, fname, rs, zs, f_err=0.0):
     """ 

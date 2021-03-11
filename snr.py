@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from coh_mfp.config import freqs
-from coh_mfp.get_dvecs import load_dvec, load_tgrid
+from swellex.audio.config import get_proj_tones
+from coh_mfp.data_test import get_r_super_cov_seq, deal_with_t_x_r, load_x
 
 '''
 Description:
@@ -16,32 +16,70 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 
 '''
 
-t = load_tgrid()
+if __name__ == '__main__':
+    proj_str = 's5_deep'
+    subfolder = '2048'
+    subfolder = '2048_doppler'
+    #subfolder = '8096_doppler'
+    num_snapshots = 15
+    tones = get_proj_tones(proj_str)
 
-noise_freqs = [x + 2 for x in freqs]
-noise_pows = np.zeros((len(noise_freqs), t.size))
-i=0
-"""
-Go through noise frequencies and form array average power 
-"""
-for freq in noise_freqs:
-    tmp = load_dvec(freq)
-    noise_pows[i,:] = np.mean(np.square(abs(tmp)), axis=0)
-    i += 1
-
-""" Now average the array averages over frequency """
-avg_noise_pow = np.mean(noise_pows, axis=0)
-
-""" Now go through and estimate signal power from dvecs """
-for freq in freqs:
-    dvec = load_dvec(freq)
-    power = np.square(abs(dvec))
-    array_avg_pow = np.mean(power, axis=0)
-    total_avg = np.mean(power)
-    snr = array_avg_pow/avg_noise_pow
-    snr_db = 10*np.log10(snr)
     fig = plt.figure()
-    plt.plot(t, snr)
-    plt.savefig(str(freq) + '_snr_db.png')
-    plt.close(fig)
+    ax = fig.add_subplot(111)
     
+
+    num_colors = len(tones)
+    cm = plt.get_cmap('gist_rainbow')
+    ax.set_prop_cycle(color=[cm(1.*i/num_colors) for i in range(num_colors)])
+
+    for source_freq in tones:
+        print(source_freq)
+        t, x = load_x(source_freq, proj_str, subfolder)
+        noise_t1, noise_x1 = load_x(source_freq-1, proj_str, subfolder)
+        noise_t2, noise_x2 = load_x(source_freq+2, proj_str, subfolder)
+
+        x_pow =  np.sum(np.square(abs(x)), axis=0) / x.shape[0]
+        nx1_pow = np.sum(np.square(abs(noise_x1)), axis=0) / noise_x1.shape[0]
+        nx2_pow = np.sum(np.square(abs(noise_x2)), axis=0) / noise_x2.shape[0]
+
+
+        num_samples = noise_t1.size
+        num_covs = (num_samples - num_snapshots) // num_snapshots
+        x_avg_pow = np.zeros((num_covs))
+        nx1_avg_pow = np.zeros((num_covs))
+        nx2_avg_pow = np.zeros((num_covs))
+        cov_t = np.zeros((num_covs))
+        for i in range(num_covs):
+            tmp = np.mean(np.square(abs(x[:,num_snapshots*i:num_snapshots*(i+1)])))
+            x_avg_pow[i] = tmp
+
+            tmp = np.mean(np.square(abs(noise_x1[:, num_snapshots*i:num_snapshots*(i+1)])))
+            nx1_avg_pow[i] = tmp
+
+            tmp = np.mean(np.square(abs(noise_x2[:, num_snapshots*i:num_snapshots*(i+1)])))
+            nx2_avg_pow[i] = tmp
+            
+            tmp = np.mean(t[num_snapshots*i:num_snapshots*(i+1)])
+            cov_t[i] = tmp
+
+
+        #plt.figure()
+        #plt.plot(x_avg_pow)
+        #plt.plot(nx1_avg_pow)
+        #plt.plot(nx2_avg_pow)
+        #plt.show()
+
+
+        n_avg_pow = (nx1_avg_pow + nx2_avg_pow) / 2
+        sig_avg_pow = x_avg_pow - n_avg_pow
+        #plt.figure()
+        #plt.plot(sig_avg_pow)
+    
+        #plt.figure()
+        snr = sig_avg_pow / n_avg_pow
+        snr_db = 10*np.log10(snr)
+        plt.plot(cov_t, snr_db)
+    plt.legend([str(x) for x in tones])
+    plt.show()
+            
+        
