@@ -23,21 +23,35 @@ Institution: Scripps Institution of Oceanography, UC San Diego
 if __name__ == '__main__':
 
     #proj_str = 's5_deep'
-    proj_str = 's5_deep'
-    subfolder = '2048'
-    num_snapshots = 15
+    proj_str = 's5_quiet4'
+
+    N_fft = 2048
+    num_snapshots = 36
+    fact = 16
+    N_fft = fact*N_fft
+
+    subfolder = str(N_fft)
+    num_snapshots = int(num_snapshots / fact)
     num_synth_els = 5
     num_tracking_els = num_synth_els
     tilt_angle = -1 
     num_freqs = 13
-    wn_gain = -2
+    wn_gain = -.5
     cov_times=get_cov_time(proj_str, subfolder, num_snapshots, num_synth_els)
-    v_arr = load_vel_arr(proj_str)
+    v_arr = load_vel_arr(proj_str, subfolder, num_snapshots)
+    if v_arr[0, -1] < cov_times[-1]:
+        new_t = cov_times[-1]
+        new_v = v_arr[1,-1]
+        new_entry = np.array([new_t, new_v]).reshape(2,1)
+        v_arr = np.concatenate((v_arr, new_entry), axis=1)
+
     v_interp = interp1d(v_arr[0,:], v_arr[1,:])
+
     root_folder ='pickles/'
 
     cmap = plt.cm.get_cmap('viridis')
     fig_name = proj_str + '_range_est_color.png'
+    #wnc = True
     wnc = True
 
 
@@ -109,6 +123,6 @@ if __name__ == '__main__':
     axes[1,0].set_ylabel('Range (m)')
     
     fig.set_size_inches(8, 4)
-    plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
+    #plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
     plt.show()
     

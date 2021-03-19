@@ -54,19 +54,26 @@ def restrict_v(t_v, v, dr):
     good_inds = [i for i in range(t_v.size) if t_v[i] > np.min(cov_t) and t_v[i] < np.max(cov_t)]
     return t_v[good_inds], v[good_inds]
 
-fig, axes = plt.subplots(3,1, sharex=True, sharey=True)
 
-proj_strs = ['s5_deep', 's5_quiet1', 's5_quiet2']
+proj_strs = ['s5_deep', 's5_quiet1', 's5_quiet2', 's5_quiet3', 's5_quiet4']
+fig, axes = plt.subplots(len(proj_strs),1, sharex=True, sharey=True)
 best_vs = []
 
-num_snapshots = 4
+N_fft = 2048
+num_snapshots = 36
+num_synth_els = 5
+fact = 8
+num_snapshots = int(num_snapshots / fact)
+N_fft = fact*N_fft
 
-plot_descriptors = ['Loud', 'Quiet 1', 'Quiet 2']
+subfolder = str(N_fft)
+plot_descriptors = ['Loud', 'Quiet 1', 'Quiet 2', 'Quiet 3', 'Quiet 4']
 cmap = plt.cm.get_cmap('viridis')
-for i in range(3):
+for i in range(len(proj_strs)):
     proj_str = proj_strs[i]
-    drp = load_mfp_results(proj_str, num_snapshots)
-    dr, vel_arr, tilt_arr = drp.get_param_arrs(15,10, 13)
+    drp = load_mfp_results(proj_str,subfolder, num_snapshots)
+    dr, vel_arr, tilt_arr = drp.get_param_arrs(num_snapshots,num_synth_els, 13)
+    vel_arr = vel_arr[1:,:]
     vel_arr = 10*np.log10(vel_arr)
     best_v = drp.vv[np.argmax(vel_arr, axis=0)]
     best_vs.append(best_v)
@@ -74,7 +81,7 @@ for i in range(3):
     db_max = 0
     db_min = -10
     levels = np.linspace(db_min, 0, 20)
-    ax = axes[i].pcolormesh(dr.cov_t/60, drp.vv, vel_arr, vmin=db_min, vmax=0, cmap=cmap)
+    ax = axes[i].pcolormesh(dr.cov_t/60, drp.vv[1:], vel_arr[1:,:], vmin=db_min, vmax=0, cmap=cmap)
 
     t_v, v = restrict_v(t_v, v, dr)
     dopp_t, dopp_v = restrict_v(dopp_t, dopp_v, dr)
@@ -92,7 +99,7 @@ fig.text(0.01, 0.5,  'Source range rate (m/s)', va='center', rotation='vertical'
 
 
 
-plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
+#plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
 
 
 plt.show()
@@ -100,7 +107,7 @@ plt.show()
 #big_ax = fig.add_subplot(111, frameon=False)
 
 plt.figure()
-for i in range(3):
+for i in range(5):
     plt.scatter(dr.cov_t/60, best_vs[i], color='k', s=10, alpha=.8)
 
 plt.scatter(dopp_t/60, dopp_v, s=8, marker='+', color='r')

@@ -27,6 +27,9 @@ Institution: Scripps Institution of Oceanography, UC San Diego
 axes[0] is the ssp and vla 
 """
 
+
+fig_name = 'env.png'
+
 proj_str = 's5_deep'
 freq= 49
 
@@ -48,18 +51,18 @@ zr = env.zr
 zs = env.zs
 #x, y = get_sea_surface(env.cw)
 #ax1.plot(x, y, color='b')
-ax1.set_xlabel('SSP (m/s)')
+ax1.set_xlabel('Sound speed (m/s)')
 ax1.invert_yaxis()
 #ax1_copy.scatter(0, zr[0], color='k', alpha=1, s=10, label='SSP')
-ax1_copy.scatter([.75]*zr.size, zr, color='k', s=10, label='Receive array')
+pt = ax1_copy.scatter([.75]*zr.size, zr, color='k', s=10, label='Receive array')
 ax1_copy.set_xticks([])
 ax1_copy.set_xlim([0, 1])
 ax1_copy.set_yticks([0, 50, 100, 150, 200])
 ax1_copy.yaxis.set_major_formatter(FormatStrFormatter('%d'))
-ax1_copy.text(0.77, 105, 'VLA')
-ax1.plot(env.cw, env.z_ss, color='k', label='SSP')
+#ax1_copy.text(0.77, 105, 'VLA')
+line, = ax1.plot(env.cw, env.z_ss, color='k', label='SSP')
 ax1.set_ylim([np.max(zr),0])
-
+ax1.legend([line, pt], ['SSP', 'VLA'])
 
 xc, yc = [0, 0, 1, 1], [0.66, 1, 1, 0.66]
 
@@ -99,6 +102,8 @@ ax2.text(-0.076, .33, '1040')
 
 
 
+fig.set_size_inches(3.75,3.75)
+plt.savefig('/home/hunter/research/coherent_matched_field/paper/pics/' + fig_name, dpi=500)
 
 
 plt.show()

@@ -8,6 +8,7 @@ from signal_proc.mfp.wnc import run_wnc, lookup_run_wnc
 from coh_mfp.proc_out import SwellProcObj, make_spo_pickle_name
 from coh_mfp.vel_estimation import load_vel_arr
 from scipy.interpolate import interp1d
+import swellex.audio.make_snapshots as ms
 
 """
 Description:
@@ -47,7 +48,8 @@ def get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v,
         for v in vv:
             print('-----------------------------------------')
             now = time.time()
-            t, x = load_x(source_freq, proj_str, subfolder)
+            fc = ms.get_fc(source_freq, v)
+            t, x = load_x(fc, proj_str, subfolder)
             num_rcvrs = x.shape[0]
             t, x, rt, rr, vv, r_interp = deal_with_t_x_r(t, x, source_freq)
             zs, zr = get_proj_zs(proj_str), get_proj_zr(proj_str)
@@ -91,13 +93,16 @@ def get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v,
             print('-----------------------------------------')
     return r, z, r_center, zs, out_db, cov_t
 
+#def get_single_freq_mcm(proj_str, subfolder, source_
+
 def get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num_snapshots, cov_index, incoh=False):
     rm_diag = False
     for num_synth_els in [num_synth_els]:
         tilt_angle = -1
         print('-----------------------------------------')
         now = time.time()
-        t, x = load_x(source_freq, proj_str, subfolder)
+        fc = ms.get_fc(source_freq, v)
+        t, x = load_x(fc, proj_str, subfolder)
         num_rcvrs = x.shape[0]
         t, x, rt, rr, vvv, r_interp = deal_with_t_x_r(t, x, source_freq)
         zs, zr = get_proj_zs(proj_str), get_proj_zr(proj_str)
@@ -200,7 +205,8 @@ def plot_wnc(r, z, out_db, r_center, zs):
 
 def get_cov_time(proj_str, subfolder, num_snapshots, num_synth_els):
     source_freq = get_proj_tones(proj_str)[0]
-    t, x = load_x(source_freq, proj_str, subfolder)
+    fc = ms.get_fc(source_freq, 0)
+    t, x = load_x(fc, proj_str, subfolder)
     t, x, rt, rr, vvv, r_interp = deal_with_t_x_r(t, x, source_freq)
     stride = num_snapshots
     r_center, cov_t, K_samps = get_r_super_cov_seq(t, x, num_snapshots, r_interp, num_synth_els, stride)
@@ -214,24 +220,34 @@ if __name__ == '__main__':
 
     #range_cell_test(source_freq)
     #sys.exit(0)
-    for wn_gain in [-2]:
 
-        num_snapshots = 15
+    N_fft = 2048
+    num_snapshots = 36
+    fact = 16
+    N_fft = fact*N_fft
+    num_snapshots = int(num_snapshots / fact)
+
+    print('N_fft, num snaps', N_fft, num_snapshots)
+    
+    for wn_gain in [-.5, -1]:
+
         
         
         tilt_angle = -1
         num_freqs =13
         num_synth_els_list = [1,5]
-        for proj_str in ['s5_deep', 's5_quiet2', 's5_quiet1', 's5_quiet3', 's5_quiet4']:
-        #for proj_str in ['s5_quiet3']:
+        subfolder =str(N_fft)
+        vv = ms.get_vv()
+        #for proj_str in ['s5_deep', 's5_quiet2', 's5_quiet1', 's5_quiet3', 's5_quiet4']:
+        #for proj_str in ['s5_deep']:
+        for proj_str in ['s5_quiet4']:
 
             proj_tones = get_proj_tones(proj_str)
             source_freq = proj_tones[7]
             print('soruce freq', source_freq)
-            subfolder ='2048_doppler'
 
             cov_times = get_cov_time(proj_str, subfolder, num_snapshots, max(num_synth_els_list))
-            v_arr = load_vel_arr(proj_str)
+            v_arr = load_vel_arr(proj_str, subfolder, num_snapshots)
 
             if v_arr[0, -1] < cov_times[-1]:
                 new_t = cov_times[-1]
@@ -253,6 +269,7 @@ if __name__ == '__main__':
                     print('cov time based on index', cov_time)
                     
                     v_source = v_interp(cov_time)
+                    v_source = vv[np.argmin([abs(v_source -x) for x in vv])] 
                     print('v source', v_source)
 
 

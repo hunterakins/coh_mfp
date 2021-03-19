@@ -16,6 +16,8 @@ import matplotlib
 matplotlib.rcParams['mathtext.fontset'] = 'stix'
 matplotlib.rcParams['font.family'] = 'STIXGeneral'
 
+PLOT_STRIDE = 1
+
 """
 Description:
 Create multi panel figure comparing our method to conventional methods.
@@ -88,14 +90,18 @@ def add_inset(axis, spo, wnc=False):
     #spo = deepcopy(spo)
     inset_axes = zoomed_inset_axes(axis, 2, 1)
     if wnc == True:
-        inset_axes.pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.wnc_out,
+        inset_axes.pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.wnc_out[:,::PLOT_STRIDE],
                                    vmin=db_min, vmax=0, cmap=cmap)
     else:
-        inset_axes.pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out,
+        inset_axes.pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE],
                                    vmin=db_min, vmax=0, cmap=cmap)
     inset_axes.set_xlim(spo.rs - 400, spo.rs + 400)
     inset_axes.set_ylim(40, 70)
-    inset_axes.scatter(spo.rs, spo.zs, color='w', marker='+', s=24)
+    #inset_axes.scatter(spo.rs, spo.zs, color='w', marker='+', s=24)
+    #inset_axes.plot(spo.rs, spo.zs, color='w', marker='.',  markeredgecolor='k', markeredgewidth=1, markerfacecolor='w', markersize=12)
+
+    inset_axes.plot(spo.rs, spo.zs, color='w', marker='+',  markeredgecolor='k', markeredgewidth=1)
+    inset_axes.plot(spo.rs, spo.zs, color='w', marker='+',  markeredgecolor='w', markeredgewidth=.5)
     inset_axes.set_xticks([])
     inset_axes.set_yticks([])
     inset_axes.invert_yaxis()
@@ -120,23 +126,38 @@ def add_inset(axis, spo, wnc=False):
 
 if __name__ == '__main__':
 
-    cov_index = 0
-    proj_str = 's5_quiet1'
-    subfolder = '2048'
-    num_snapshots = 15
+    cov_index = 17
+    proj_str = 's5_quiet3'
+    N_fft = 2048
+    num_snapshots = 30
+    #num_snapshots = 15
+    fact = 8
+    N_fft = fact*N_fft
+
+    subfolder =str(N_fft)
+    num_snapshots = int(num_snapshots/fact)
     num_synth_els = 5
     num_tracking_els = num_synth_els
     tilt_angle = -1 
     num_freqs = 13
-    wn_gain = -2
+    wn_gain = -0.5
     cov_times=get_cov_time(proj_str, subfolder, num_snapshots, num_synth_els)
     cov_time = cov_times[cov_index]
-    v_arr = load_vel_arr(proj_str)
+    print(cov_time)
+    v_arr = load_vel_arr(proj_str, subfolder, num_snapshots)
+    if v_arr[0, -1] < cov_times[-1]:
+        new_t = cov_times[-1]
+        new_v = v_arr[1,-1]
+        new_entry = np.array([new_t, new_v]).reshape(2,1)
+        v_arr = np.concatenate((v_arr, new_entry), axis=1)
     v_interp = interp1d(v_arr[0,:], v_arr[1,:])
     v_source = v_interp(cov_time)
     print('v source', v_source)
     root_folder ='pickles/'
 
+    #cmap =plt.cm.get_cmap('binary')
+    #fig_name = proj_str + '_proc_comp_bw.png'
+    cmap = plt.cm.get_cmap('viridis')
     fig_name = proj_str + '_proc_comp.png'
 
     """ Get tracking spo """
@@ -149,23 +170,22 @@ if __name__ == '__main__':
 
 
     fig, axes = plt.subplots(2,3, sharex=True, sharey=True)
-    db_max = np.max(spo.bart_out)
-    spo.bart_out -= db_max
+    db_max = np.max(spo.bart_out[:,::PLOT_STRIDE])
+    spo.bart_out[:,::PLOT_STRIDE] -= db_max
     db_min = -10
     levels = np.linspace(-15, 0, 25)
-    #CS1 = axes[0,0].contourf(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out, 
-    cmap =plt.cm.get_cmap('viridis')
+    #CS1 = axes[0,0].contourf(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE], 
     #cmap.set_under('blue')
-    pcm = axes[0,2].pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out,
+    pcm = axes[0,2].pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
-    add_inset(axes[0,2], spo, wnc=False)
+    #add_inset(axes[0,2], spo, wnc=False)
     
-    db_max = np.max(spo.wnc_out)
-    spo.wnc_out -= db_max
-    pcm1 = axes[1,2].pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.wnc_out,
+    db_max = np.max(spo.wnc_out[:,::PLOT_STRIDE])
+    spo.wnc_out[:,::PLOT_STRIDE] -= db_max
+    pcm1 = axes[1,2].pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.wnc_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
 
-    add_inset(axes[1,2], spo, wnc=True)
+    #add_inset(axes[1,2], spo, wnc=True)
 
 
    
@@ -175,44 +195,46 @@ if __name__ == '__main__':
     num_synth_els = 1
     spo = load_spo(root_folder, proj_str, subfolder, num_snapshots, tilt_angle, num_synth_els, num_freqs, v_source, cov_time, wn_gain)
     spo.get_bathy_corr()
-    db_max = np.max(spo.bart_out)
-    spo.bart_out -= db_max
-    #CS1 = axes[0,0].contourf(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out, 
+    db_max = np.max(spo.bart_out[:,::PLOT_STRIDE])
+    spo.bart_out[:,::PLOT_STRIDE] -= db_max
+    #CS1 = axes[0,0].contourf(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE], 
     #cmap.set_under('blue')
-    pcm = axes[0,0].pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out,
+    pcm = axes[0,0].pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
-    add_inset(axes[0,0], spo, wnc=False)
+    #add_inset(axes[0,0], spo, wnc=False)
 
-    db_max = np.max(spo.wnc_out)
-    spo.wnc_out -= db_max
-    pcm1 = axes[1,0].pcolormesh(spo.corr_grid_r, spo.corr_grid_z, spo.wnc_out,
+    db_max = np.max(spo.wnc_out[:,::PLOT_STRIDE])
+    spo.wnc_out[:,::PLOT_STRIDE] -= db_max
+    pcm1 = axes[1,0].pcolormesh(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.wnc_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
 
-    add_inset(axes[1,0], spo,  wnc=True)
+    #add_inset(axes[1,0], spo,  wnc=True)
 
 
     """ tracking results """
-    db_max = np.max(tracking_spo.bart_out)
+    db_max = np.max(tracking_spo.bart_out[:,::PLOT_STRIDE])
     print('db_max' ,db_max)
-    tracking_spo.bart_out -= db_max
-    #CS1 = axes[0,0].contourf(spo.corr_grid_r, spo.corr_grid_z, spo.bart_out, 
+    tracking_spo.bart_out[:,::PLOT_STRIDE] -= db_max
+    #CS1 = axes[0,0].contourf(spo.corr_grid_r[::PLOT_STRIDE], spo.corr_grid_z, spo.bart_out[:,::PLOT_STRIDE], 
     #cmap.set_under('blue')
-    pcm = axes[0,1].pcolormesh(tracking_spo.corr_grid_r, tracking_spo.corr_grid_z, tracking_spo.bart_out,
+    pcm = axes[0,1].pcolormesh(tracking_spo.corr_grid_r[::PLOT_STRIDE], tracking_spo.corr_grid_z, tracking_spo.bart_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
-    add_inset(axes[0,1], tracking_spo,  wnc=False)
-    db_max = np.max(tracking_spo.wnc_out)
-    tracking_spo.wnc_out -= db_max
-    print(spo.corr_grid_r[np.argmax(tracking_spo.wnc_out) % spo.corr_grid_r.size])
-    pcm1 = axes[1,1].pcolormesh(tracking_spo.corr_grid_r, tracking_spo.corr_grid_z, tracking_spo.wnc_out,
+    #add_inset(axes[0,1], tracking_spo,  wnc=False)
+    db_max = np.max(tracking_spo.wnc_out[:,::PLOT_STRIDE])
+    tracking_spo.wnc_out[:,::PLOT_STRIDE] -= db_max
+    print(spo.corr_grid_r[np.argmax(tracking_spo.wnc_out[:,::PLOT_STRIDE]) % spo.corr_grid_r.size])
+    pcm1 = axes[1,1].pcolormesh(tracking_spo.corr_grid_r[::PLOT_STRIDE], tracking_spo.corr_grid_z, tracking_spo.wnc_out[:,::PLOT_STRIDE],
                                     vmin=db_min, vmax=0, cmap=cmap)
 
-    add_inset(axes[1,1], tracking_spo,  wnc=True)
+    #add_inset(axes[1,1], tracking_spo,  wnc=True)
 
     axes[1,0].invert_yaxis()
 
 
     for ax in axes.ravel().tolist():
-        ax.scatter(spo.rs, spo.zs, color='w', marker='+', s=9)
+        #ax.plot(spo.rs, spo.zs, color='w', marker='+',  markeredgecolor='k', markeredgewidth=5, markerfacecolor='w', markersize=6)
+        ax.plot(spo.rs, spo.zs, color='w', marker='+',  markeredgecolor='k', markeredgewidth=1)
+        ax.plot(spo.rs, spo.zs, color='w', marker='+',  markeredgecolor='w', markeredgewidth=.5)
 
 
 
@@ -243,6 +265,6 @@ if __name__ == '__main__':
     
 
     fig.set_size_inches(8, 4)
-    plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
+    #plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
 
     plt.show()

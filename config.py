@@ -21,7 +21,8 @@ Institution: UC San Diego, Scripps Institution of Oceanography
 """ Pick source params
 and receiver config """
 
-conf_folder = '/oasis/tscc/scratch/fakins/coh_mfp/confs/'
+#conf_folder = '/media/hunter/ExtHard/data/coh_mfp/confs/'
+conf_folder = 'dats/confs/'
 local_conf_folder = 'confs/'
 
 class ExpConf:
@@ -33,7 +34,6 @@ class ExpConf:
         self.source_vel = var_dict['source_vel']
         self.fft_len = var_dict['fft_len']
         self.fft_spacing = var_dict['fft_spacing']
-        self.SNR = var_dict['SNR']
         self.fs = var_dict['fs']
         self.ship_dr = var_dict['ship_dr']
         self.dz = var_dict['dz']
@@ -44,12 +44,9 @@ class ExpConf:
         self.r1 = var_dict['r1']
         self.zr = var_dict['zr']
         self.zs = var_dict['zs']
-        self.cov_int_time = var_dict['cov_int_time']
-        self.num_ranges = var_dict['num_ranges']
         self.n_overlap = var_dict['n_overlap']
         self.proj_root = var_dict['proj_root']
         self.fig_folder = var_dict['fig_folder']
-        self.num_realizations = var_dict['num_realizations']
         self.exp_id = var_dict['exp_id']
    
 def load_config(exp_id, local=False):

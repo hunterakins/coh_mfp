@@ -29,6 +29,7 @@ Institution: Scripps Institution of Oceanography, UC San Diego
 def load_x(freq, proj_str, subfolder,data_root='/home/hunter/data/'):
     name = ms.make_fname(proj_str, data_root, freq,subfolder)
     tname = ms.make_tgrid_fname(proj_str, data_root,subfolder)
+    #print('name', name)
     x = np.load(name)
     t = np.load(tname)
     return t, x
@@ -43,16 +44,16 @@ def rm_source_phase(t, x, freq):
 
 def restrict_track(t, x, delta_t=1024/1500): #start_ind, end_ind = 1000, 2000
     #start_ind, end_ind = 5800, 6300
-    start_min = 6
-    start_ind = int(start_min*60/delta_t)
+    #start_min = 6
+    #start_ind = int(start_min*60/delta_t)
     #start_ind, end_ind = 3515, 4830 # roughly the period from 40 mins to 55 mins
     #start_ind, end_ind = 3515, 3600
     #start_ind, end_ind = 1640, 1840
-    t = t[start_ind:]
-    if len(x.shape) == 2:
-        x = x[:,start_ind:]
-    else:
-        x = x[start_ind:]
+    #t = t[start_ind:]
+    #if len(x.shape) == 2:
+    #    x = x[:,start_ind:]
+    #else:
+    #    x = x[start_ind:]
     return t, x
 
 def get_env(proj_str, source_freq):
@@ -88,7 +89,7 @@ def stride_data(t, x, offset, stride):
     also return T, the time interval corresponding to the stride
      
     """
-    print('stride', stride)
+    #print('stride', stride)
     stride_t = t[offset::stride]
     stride_x = x[:,offset::stride]
     return stride_t, stride_x, T
@@ -285,6 +286,8 @@ def get_r_super_cov_seq(t, x, num_snap_per_cov, r_interp, num_synth_els, stride,
         if incoh==True:
             ith_cov *= mask
 
+        ith_cov /= np.trace(ith_cov)
+
         K_samps[i,:,:] = ith_cov
         t_centers.append(t_center)
     t_centers = np.array(t_centers)
@@ -414,7 +417,6 @@ def populate_env(env, source_freq, zs, zr, rr, fname='swell'):
     env.add_source_params(source_freq, zs, zr)
     synth_x, _ = env.run_model('kraken_custom_r', 'at_files/', fname, zr_flag=True, zr_range_flag=False, custom_r = rr)
     kbar = np.mean(env.modes.k).real
-    print('kbar', kbar)
     env.add_source_params(source_freq, zr, zr)
     return env
 
@@ -432,7 +434,6 @@ def get_synth_arr_params(source_freq, t, num_snapshots):
     stride = num_snapshots
     T = delta_t*stride
     return delta_t, stride, T
-
 
 def augment_outputs(outputs, r_center, K_samps, env, num_synth_els, T, specific_v):
     if outputs == []:
@@ -537,12 +538,12 @@ def get_outputs(drp, wnc=False, **kwargs):
 
 
     for freq_ind, source_freq in enumerate(freqs):
-        print('Now processing freq', source_freq)
-        t, x =  load_x(source_freq, drp.proj_str, drp.subfolder)
+        #print('Now processing freq', source_freq)
+        fc = ms.get_fc(source_freq, drp.v)  
+        t, x =  load_x(fc, drp.proj_str, drp.subfolder)
         num_rcvrs = x.shape[0]
         if freq_ind == 0:
             rcvr_stride = int(zr.size // num_rcvrs)
-            print('rcvr stride', rcvr_stride)
             zr = zr[::rcvr_stride]
 
         t,x, rt, rr, vv, r_interp = deal_with_t_x_r(t, x, source_freq)
@@ -551,22 +552,22 @@ def get_outputs(drp, wnc=False, **kwargs):
         env = populate_env(env, source_freq, zs, zr, rr, fname=drp.proj_str)
         kbar = np.mean(env.modes.k.real)
         delta_k = np.max(env.modes.k.real) - np.min(env.modes.k.real)
-        print('delta_k', delta_k)
-        print('range cell', 2 * np.pi / delta_k)
+        #print('delta_k', delta_k)
+        #print('range cell', 2 * np.pi / delta_k)
         time_in_cell = 2*np.pi / delta_k / 2.5
-        print('time in cell', 2*np.pi / delta_k  / 2.5)
+        #print('time in cell', 2*np.pi / delta_k  / 2.5)
 
         delta_t = t[1]-t[0]      
-        print('good num snaps',  time_in_cell/ delta_t)
+        #print('good num snaps',  time_in_cell/ delta_t)
         delta_t, stride, T = get_synth_arr_params(source_freq, t, drp.num_snapshots)
-        print('stride, T', stride, T)
+        #print('stride, T', stride, T)
      
         r_center, cov_t, K_samps = get_r_super_cov_seq(t, x,drp.num_snapshots, r_interp, drp.num_synth_els, stride, incoh=drp.incoh)
 
-        print(' num k samps', cov_t.size)
+        #print(' num k samps', cov_t.size)
         t_before = time.time()
         r, z, synth_reps = get_mult_el_reps(env, drp.num_synth_els, drp.v, T,fname=drp.proj_str,adiabatic=False, tilt_angle=drp.tilt_angle)
-        print('Time to compute replcias =' , time.time() - t_before)
+        #print('Time to compute replcias =' , time.time() - t_before)
         if source_freq == freqs[0]:
             bart_outs = np.zeros((len(r_center), z.size, r.size))
             max_vals = np.zeros((len(freqs), len(r_center)))
@@ -599,7 +600,7 @@ def get_outputs(drp, wnc=False, **kwargs):
             """ Add to bartlett mat """
             bart_outs[i,:,:] += output
             max_vals[freq_ind, i] = max_val
-        print('Time to compute bartlett =' , time.time() - t_before)
+        #print('Time to compute bartlett =' , time.time() - t_before)
 
         """ Comput wnc if it's a thing  """
         t_before = time.time()
@@ -613,7 +614,7 @@ def get_outputs(drp, wnc=False, **kwargs):
             #    wnc_out_freq[i,:,:] /= wnc_max_val_freq[i]
             wnc_out_freq = 10*np.log10(wnc_out_freq)
             wnc_outs += wnc_out_freq
-        print('Time to compute wnc =' , time.time() - t_before)
+        #print('Time to compute wnc =' , time.time() - t_before)
             
     r_center = r_center[:num_times]
     cov_t = cov_t[:num_times] # make sure we truncate based on first freq
@@ -919,8 +920,8 @@ def form_best_output_mat(dr_list):
     return best_outs
     
 rmax = 10*1e3
-grid_dr = 10
-rmin = 500
+grid_dr = 100
+rmin = 600
 
 if __name__ == '__main__':
     #simple_stacked_bart()
@@ -928,10 +929,12 @@ if __name__ == '__main__':
     incoh = False
     wnc = False
     wn_gain = -1
+    N_fft = 8096
+    subfolder = str(N_fft)
+    num_snap_list = [10]
     for proj_str in ['s5_deep']:#, 's5_quiet1']:#, 's5_quiet2', 's5_quiet3', 's5_quiet4']:
         freqs = get_proj_tones(proj_str)
         t0 = time.time()
-        subfolder = '2048'
         #num_freqs= 4
         #freqs = get_proj_tones(proj_str)[:num_freqs]
         #num_synth_els = 1
@@ -939,7 +942,6 @@ if __name__ == '__main__':
         vv = np.linspace(-1.8, -2.5, 10)
         vv = np.array([round(x, 4) for x in vv])
         
-        num_snap_list = [4]
         num_freq_list = [13]
         num_synth_el_list = [1]
         #tilt_angles = np.linspace(-0.5, -1.75, 6)
