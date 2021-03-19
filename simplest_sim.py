@@ -8,6 +8,7 @@ import multiprocessing as mp
 from signal_proc.mfp.wnc import run_wnc, lookup_run_wnc
 from signal_proc.mfp.mcm import run_mcm
 import time
+import pickle
 
 '''
 Description:
@@ -22,8 +23,23 @@ Date:
 Author: Hunter Akins
 
 Institution: UC San Diego, Scripps Institution of Oceanography
-
 '''
+
+def plot_amb_surf(db_range, r, z, amb_surf, title_str, r_true, zs, show=False):
+    levels = np.linspace(db_range[0], db_range[1], 20)
+    fig = plt.figure()
+    plt.contourf(r, z, amb_surf, levels=levels, extend='both')
+    plt.colorbar()
+    plt.scatter(r_true, zs, zs, marker='+', color='r')
+    ind = np.argmax(amb_surf)
+    inds = (ind % r.size, int(ind // r.size))
+    plt.scatter(r[inds[0]], z[inds[1]], marker='+', color='b')
+    plt.gca().invert_yaxis()
+    fig.suptitle(title_str)
+    if show == True:
+        plt.show()
+    return fig
+
 
 def add_noise(p_true, snr_db):
     mean_pow = np.mean(np.square(abs(p_true)))
@@ -36,13 +52,19 @@ def add_noise(p_true, snr_db):
     p_true = p_true + noise_vec
     return p_true
 
-def add_noise_cov(p_true, snr_db):
+def add_noise_cov(p_true, snr_db, num_snapshots):
     mean_pow = np.mean(np.square(abs(p_true)))
     noise_var = mean_pow/(np.power(10, snr_db/10))
-    #noise_vec = np.sqrt(noise_var/2)* np.random.randn(p_true.size) + complex(0,1)*np.sqrt(noise_var/2)*np.random.randn(p_true.size)
-    #noise_vec = noise_vec.reshape(p_true.shape)
+
     K_true = np.outer(p_true, p_true.conj())
-    noise_K = noise_var*np.identity(p_true.size)  #+ complex(0,1)*noise_var/2 * np.identity(p_true.size)
+    noise_K = np.zeros((K_true.shape), dtype=np.complex128)
+    for i in range(num_snapshots):
+        noise_vec = np.sqrt(noise_var/2)* np.random.randn(p_true.size) + complex(0,1)*np.sqrt(noise_var/2)*np.random.randn(p_true.size)
+        noise_vec = noise_vec.reshape(p_true.shape)
+        noise_K += np.outer(noise_vec, noise_vec.conj())
+    noise_K /= num_snapshots
+
+    #noise_K = noise_var*np.identity(p_true.size)  #+ complex(0,1)*noise_var/2 * np.identity(p_true.size)
     return K_true+noise_K
 
 def get_amb_surf(r, z, K_true, replicas, matmul=False):
@@ -91,177 +113,233 @@ def get_mvdr_amb_surf(r, z, K_true, replicas):
     amb_surf = 10*np.log10(abs(amb_surf))
     return amb_surf
 
-def plot_amb_surf(db_range, r, z, amb_surf, title_str, r_true, zs, show=False):
-    """
-    """
-    levels = np.linspace(db_range[0], db_range[1], 20)
-    fig = plt.figure()
-    plt.contourf(r, z, amb_surf, levels=levels, extend='both')
-    plt.colorbar()
-    plt.scatter(r_true, zs, zs, marker='+', color='r')
-    ind = np.argmax(amb_surf)
-    inds = (ind % r.size, int(ind // r.size))
-    plt.scatter(r[inds[0]], z[inds[1]], marker='+', color='b')
-    plt.gca().invert_yaxis()
-    fig.suptitle(title_str)
-    if show == True:
-        plt.show()
-    return fig
-
-def mvdr_quick_plot(r, z, K_true, replicas, db_scale, title_str, r_true, zs):
-    output = get_mvdr_amb_surf(r, z, K_true, replicas)
-    plot_amb_surf(db_scale, r, z, output, title_str + 'mvdr', r_true, zs, show=False)
-    return
-
-def bart_quick_plot(r, z, K_true, replicas, db_scale, title_str, r_true, zs):
-    output = get_amb_surf(r, z, K_true, replicas)
-    plot_amb_surf(db_scale, r, z, output, title_str + 'bart', r_true, zs, show=False)
-    return
-
-def wnc_quick_plot(r, z, K_true, replicas, db_scale, wn_gain, title_str, r_true, zs):
-    output = lookup_run_wnc(K_true, replicas, wn_gain)
-    output = 10*np.log10(abs(output/np.max(abs(output))))
-    plot_amb_surf(db_scale, r, z, output[:,:,0], title_str + 'wn gain ' + str(wn_gain), r_true, zs, show=False)
-    return
-    
-def quick_plot_suite(r, z, K_true, replicas, db_scale, title_str, r_true, zs):
-    """
-    p1 = mp.Process(target = mvdr_quick_plot, args=(r, z, K_true, replicas, db_scale, title_str, r_true, zs))
-    p1.start()
-    #mvdr_quick_plot(r, z, K_true, replicas, db_scale, title_str, r_true, zs)
-    p2 = mp.Process(target = wnc_quick_plot, args = (r, z, K_true, replicas, db_scale, -1, title_str, r_true, zs))
-    p2.start()
-    p3 = mp.Process(target = wnc_quick_plot, args = (r, z, K_true, replicas, db_scale, -3, title_str, r_true, zs))
-    p3.start()
-    p4 = mp.Process(target = wnc_quick_plot, args = (r, z, K_true, replicas, db_scale, -6, title_str, r_true, zs))
-    p4.start()
-    p5 = mp.Process(target = bart_quick_plot, args = (r, z, K_true, replicas, db_scale, title_str, r_true, zs))
-    p5.start()
-    p1.join()
-    p2.join()
-    p3.join()
-    p4.join()
-    p5.join()
-    """
-    mvdr_quick_plot(r, z, K_true[:,:,0], replicas, db_scale, title_str, r_true, zs)
-    wnc_quick_plot(r, z, K_true, replicas, db_scale, -1, title_str, r_true, zs)
-    wnc_quick_plot(r, z, K_true, replicas, db_scale, -3, title_str, r_true, zs)
-    wnc_quick_plot(r, z, K_true, replicas, db_scale, -6, title_str, r_true, zs)
-    bart_quick_plot(r, z, K_true[:,:,0], replicas, db_scale, title_str, r_true, zs)
-    return
-
-if __name__ == '__main__':
-
-    start_time = time.time()
-    freq = 50
-    num_rcvrs = 2
-    zr = np.linspace(50, 200, num_rcvrs)
-    zs = 50
+def get_env():
+    env_builder = factory.create('swellex')
+    env = env_builder()
+    source_freq = 100
     dz = 5 
     zmax = 216.5
     dr = 25
     rmax = 1e4
-
-    env_builder = factory.create('swellex')
-    env = env_builder()
-    folder = 'at_files/'
-    fname = 'simple'
-    env.add_source_params(freq, zs, zr)
+    num_rcvrs = 21
+    zr = np.linspace(100, 200, num_rcvrs)
+    folder, fname=  'at_files/', 'simple'
+    env.add_source_params(source_freq, zr, zr)
     env.add_field_params(dz, zmax, dr, rmax)
-    p, pos = env.run_model('kraken', folder, fname, zr_flag=True, zr_range_flag=False)
-    p1 = p
-    env.add_source_params(freq, zr, zr)
-    replicas, pos = env.run_model('kraken', folder, fname, zr_flag=False, zr_range_flag=False)
-    replicas /= np.linalg.norm(replicas, axis=0)
-    #env.add_source_params(freq, zs, zr)
-    #custom_r = np.arange(dr, rmax+dr, dr)
-    #x, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=True, zr_range_flag=False, custom_r=custom_r)
+    return env
 
+def form_replicas(env, rmin, rmax, grid_dr, v, cov_T, num_synth_els, folder, fname, adiabatic=False,tilt_angle=0):
+    synth_dr = v*cov_T
+    og_r = np.arange(rmin, rmax+ grid_dr, grid_dr)
+    num_r = og_r.size
+    custom_r = og_r[:]
+
+    """ Form the range grid """
+    for i in range(1, num_synth_els):
+        tmp = og_r + synth_dr*i
+        custom_r = np.concatenate((custom_r, tmp))
+
+    """ Run the model """
+    if adiabatic==False:
+        replica, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=False, zr_range_flag=False, custom_r = custom_r, tilt_angle=tilt_angle)
+    else:
+        replica, pos = env.s5_approach_adiabatic_replicas(folder, fname, custom_r, tilt_angle=tilt_angle)
+
+    """ Stack the replicas """
+    synth_replicas = np.zeros((num_synth_els*env.zr.size, env.pos.r.depth.size,  og_r.size), dtype=np.complex128)
+    for i in range(num_synth_els):
+        synth_replicas[i*(env.zr.size):(i+1)*env.zr.size, :,:] = replica[:, :, i*num_r:(i+1)*num_r]
+    synth_replicas /= np.linalg.norm(synth_replicas , axis=0)
+    return og_r, pos.r.depth, synth_replicas
+
+def gen_synth_data(env, num_synth_els, r0, ship_dr, folder, fname):
+    """ 
+    Initialize the environment
+    Generate a synthetic data set
+    """
+    if num_synth_els == 1:
+        true_r = np.array([r0])
+    else:
+        true_r = np.linspace(r0, r0 + (num_synth_els -1)*ship_dr, num_synth_els)
+    print('True ranges', true_r)
+    
+    synth_data, pos = env.run_model('kraken_custom_r', folder, fname, zr_flag=True, zr_range_flag=False, custom_r=true_r)
+    """ Reshape true data into supervector """
+    synth_p_true = synth_data.reshape(synth_data.size, 1, order='F')
+    synth_p_true /= np.linalg.norm(synth_p_true)
+    return true_r, synth_data, synth_p_true, pos
+
+def get_mult_el_reps(env, num_synth_els, v, cov_T,fname='swell', adiabatic=False, tilt_angle=0):
+    """
+    Generate the replicas for multiple synthetic elements
+    with an assumed range rate of v and snapshot time separation
+    of T
+    """
+    folder=  'at_files/'
+    r, z, synth_reps = form_replicas(env, rmin, rmax, grid_dr, v, cov_T, num_synth_els, folder, fname, adiabatic=adiabatic, tilt_angle=tilt_angle)
+    return r, z, synth_reps
+
+class MCObj:
+    def __init__(self, snr_arr, rmse_arr, num_synth_els, num_snapshots, proc_type):
+        self.snr_arr = snr_arr
+        self.rmse_arr = rmse_arr
+        self.proc_type = proc_type
+        self.num_synth_els = num_synth_els
+        self.num_snapshots = num_snapshots
+
+rmin = 500
+rmax = 1e4
+grid_dr=  50
+
+def get_MCObj(num_synth_els, num_snapshots, wnc, wn_gain):
+    env = get_env()
+    zs = 50
+    T = 5 # time between snapshots
+    cov_T = T*num_snapshots
+    v = 2.5
+    v_err = 1.00
+    ship_dr= v*cov_T
+    print('ship_dr', ship_dr)
+
+    r, z, synth_reps = get_mult_el_reps(env, num_synth_els, v*v_err, cov_T, fname='swell')
 
     r0 = 5e3
-    true_ind = np.argmin(np.array([abs(r0 - x) for x in pos.r.range]))
-    r0 = pos.r.range[true_ind]
-    p_true = p[:,true_ind]
-    r_true = pos.r.range[true_ind]
-    print('r true, zs', r_true, zs)
-    snr_db = 10
+    true_ind = np.argmin(np.array([abs(r0 - x) for x in r]))
 
-    K_tmp = add_noise_cov(p_true, snr_db)
-    K_true = K_tmp
-    print('Reshaping K_true to hae a time axis')
-    #K_true=K_true.reshape(1, K_true.shape[0], K_true.shape[1])
 
-    out2, max_val2 = get_amb_surf(pos.r.range, pos.r.depth, K_true, replicas, matmul=True)
-    out1, max_val1 = get_amb_surf(pos.r.range, pos.r.depth, K_true, replicas, matmul=False)
-    print(out2-out1)
-    plt.figure()
-    plt.plot(out2-out1)
-    db_scale = [-10, 0]
-    title_str = 'comp '
-    plot_amb_surf(db_scale, pos.r.range, pos.r.depth, out2, 'matmul' + 'bart', r_true, zs, show=False)
-    plot_amb_surf(db_scale, pos.r.range, pos.r.depth, out1, 'for loop' + 'bart', r_true, zs, show=True)
-    sys.exit(0)
+    """ Get some data """
+    env.zs = zs
+
+    synth_p_snaps = []
+    for k in range(num_snapshots):
+        rs = r0 + k*v*T
+        true_r, synth_data, synth_p_true, pos = gen_synth_data(env, num_synth_els, rs, ship_dr, 'at_files/', 'swell')
+        synth_p_snaps.append(synth_p_true)
+
+    r_true = r0 + (num_snapshots-1)/2*v*T
+    print('r true', r_true)
+
+
+
+    num_realizations = 100
+    snr_db_list = np.linspace(5, -30,  25)
+    bart_rmse_arr = np.zeros((len(snr_db_list)))
+    wnc_rmse_arr = np.zeros((len(snr_db_list)))
+    for snr_ind, snr_db in enumerate(snr_db_list):
+
+        print('snr db', snr_db)
+        bart_sq_err_arr = np.zeros((num_realizations))
+        wnc_sq_err_arr = np.zeros((num_realizations))
+    
+
+        for i in range(num_realizations):
+            """ FOrm sample cov """
+            for k in range(num_snapshots):
+                K_tmp = add_noise_cov(synth_p_snaps[k], snr_db, 1)
+                if k == 0:
+                    K_true = K_tmp
+                else:
+                    K_true += K_tmp
+
+            """ Get bart amb surf and sq err """
+            bart_out, bart_max_val = get_amb_surf(r, z, K_true, synth_reps, matmul=True)
+            best_ind = np.argmax(bart_out)
+            best_range = r[best_ind % r.size]
+            best_depth = r[best_ind // r.size]
+            range_err = best_range - r_true
+            sq_err = np.square(range_err)
+            bart_sq_err_arr[i] = sq_err
+
+            """ Get wnc amb surf and sq err """
+            if wnc == True:
+                K_true = K_true.reshape(1, K_true.shape[0], K_true.shape[1])
+                wnc_out = lookup_run_wnc(K_true, synth_reps, wn_gain)
+                best_ind = np.argmax(wnc_out)
+                best_range = r[best_ind % r.size]
+                best_depth = r[best_ind // r.size]
+                range_err = best_range - r_true
+                sq_err = np.square(range_err)
+                wnc_sq_err_arr[i] = sq_err
+                wnc_db = 10*np.log10(wnc_out / np.max(wnc_out))
+                levels = np.linspace(-10, 0, 20)
+
+
+        bart_rmse = np.sqrt(np.mean(bart_sq_err_arr))
+        bart_rmse_arr[snr_ind] = bart_rmse
+        if wnc == True:
+            wnc_rmse = np.sqrt(np.mean(wnc_sq_err_arr))
+            wnc_rmse_arr[snr_ind] = wnc_rmse
+
+    bart_mc = MCObj(np.array(snr_db_list), bart_rmse_arr, num_synth_els, num_snapshots, 'bart')
+    if wnc == True:
+        wnc_mc = MCObj(np.array(snr_db_list), wnc_rmse_arr, num_synth_els, num_snapshots, 'wnc_' + str(wn_gain))
+        return bart_mc, wnc_mc
+    else:
+        return bart_mc
+
+
+def make_mc_name(mc_obj, root_folder='pickles/'):
+    name = '_'.join([str(mc_obj.num_synth_els), str(mc_obj.num_snapshots), mc_obj.proc_type])
+    pname = root_folder + name + '.pickle'
+    return pname
+
+def save_mc(mc_obj, root_folder):
+    pname = make_mc_name(mc_obj, root_folder)
+    with open(pname, 'wb') as f:
+        pickle.dump(mc_obj, f)
+    return
+
+def load_mc(num_synth_els, num_snapshots, proc_type, root_folder='pickles/'):
+    name = '_'.join([str(num_synth_els), str(num_snapshots), proc_type]) + '.pickle'
+    pname = root_folder + name
+    with open(pname, 'rb') as f:
+        mc_obj = pickle.load(f)
+    return mc_obj
+    
+    
+
+if __name__ == '__main__':
+
+    start_time = time.time()
+
+
+    fig, ax = plt.subplots(1,1)
+    wn_gain = -1
+    wnc=False
+    load = True
+
+    if load == False:
+        bart_mc = get_MCObj(1,4,wnc,wn_gain)
+        save_mc(bart_mc, 'pickles/')
+    else:
+        bart_mc = load_mc(1, 4, 'bart') 
+
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='r', marker='x')
+
+    if load == False:
+        bart_mc = get_MCObj(5, 4, wnc, wn_gain)
+        save_mc(bart_mc, 'pickles/')
+    else:
+        bart_mc = load_mc(5, 4, 'bart') 
+
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='b', marker='x')
+
+    if load == False:
+        bart_mc = get_MCObj(10, 4, wnc, wn_gain)
+        save_mc(bart_mc, 'pickles/')
+    else:
+        bart_mc = load_mc(10, 4, 'bart')
+
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='k', marker='x')
+
+    plt.legend(['No synth els', '5 synth els', '10 synth els'])
+
+    plt.show()
     
     #output = lookup_run_wnc(K_true, replicas, -1)
     #p_true = add_noise(p_true, snr_db)
     #K_true = np.outer(p_true, p_true.conj())
 
-    """
-    MCM Test
 
-    """
-    r_list = [replicas[:, 1:-1,1:-1], replicas[:, :-2, :-2], replicas[:, 2:, :-2], replicas[:, :-2, 2:], replicas[:, 2:, 2:]]
-    output = run_mcm(K_true,r_list)
-    output = output[:,:,0]
-    output = 10*np.log10(abs(output) / np.max(abs(output)))
-    #plot_amb_surf(-10, pos.r.range[1:-1], pos.r.depth[1:-1],  output, 'mcm', r0, zs)
+1
 
-
-    now = time.time()
-    db_scale = [-10, 0]
-    quick_plot_suite(pos.r.range,pos.r.depth, K_true, replicas, db_scale, 'standard ',r_true, zs)
-
-    print('time elapsed' , time.time()-now)
-
-
-    stride = 1
-    num_synth_els = 5
-    synth_dr = stride*dr
-    synthetic_array = p[:,true_ind:true_ind+10:stride]
-    synth_p_true = synthetic_array.reshape(synthetic_array.size,1, order='F')
-    synth_p_true = deepcopy(synth_p_true)
-    synth_K_true =add_noise_cov(synth_p_true, snr_db)
-    print('Reshaping K_true to hae a time axis')
-    synth_K_true=synth_K_true.reshape(1, synth_K_true.shape[0], synth_K_true.shape[1])
-    #synth_p_true = add_noise(synth_p_true, snr_db)
-    #synth_K_true = np.outer(synth_p_true, synth_p_true.conj())
-
-    synth_r = pos.r.range[true_ind:true_ind+10:stride]
-    print('synth spacing', synth_r[1]-synth_r[0], ' meters')
-    num_synth_els = synth_r.size
-    print('number synth els' ,num_synth_els)
-
-
-    num_ranges=  pos.r.range.size
-    num_depths = pos.r.depth.size
-    synth_rep = np.zeros((num_rcvrs*num_synth_els, num_depths, num_ranges), dtype=np.complex128)
-    hanger= 0
-    for i in range(num_synth_els):
-        vals = replicas[:,:,stride*i:]
-        synth_rep[i*num_rcvrs:(i+1)*num_rcvrs, :, :vals.shape[-1]] = vals
-        num_leftovers = num_ranges - vals.shape[-1]
-        hanger = np.max([num_leftovers, hanger])
-        print('num left', num_leftovers)
-
-    synth_rep = synth_rep[:,:,:-hanger]
-    synth_pos = deepcopy(pos)
-    synth_pos.r.range = synth_pos.r.range[:-hanger]
-    print(synth_rep.shape, synth_pos.r.range.shape, synth_pos.r.depth.shape)
-    synth_rep = synth_rep.copy(order='c')
-    now = time.time()
-
-    quick_plot_suite(synth_pos.r.range, synth_pos.r.depth, synth_K_true, synth_rep, db_scale, 'synthetic ', r_true, zs)
-    print('synth quick plot', time.time() - now)
-    print('total_time', time.time() - start_time)
-
-    plt.show()

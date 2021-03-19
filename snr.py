@@ -72,6 +72,7 @@ if __name__ == '__main__':
     for fact in [4, 8, 16, 32, 64, 128]:
         Nfft = 2048*fact
         num_snapshots = int(36 / fact)
+        print('nfft, num_snaps', Nfft, num_snapshots)
         if num_snapshots < 1:
             num_snapshots = 1
         print('num snaps', num_snapshots)
