@@ -87,6 +87,7 @@ if __name__ == '__main__':
     freq = 50
     num_rcvrs = 25
     zr = np.linspace(50, 200, num_rcvrs) # array depths
+    zr = np.array([50])
     zs = 50 # source depth
 
     r0 = 5*1e3 # initial source range
@@ -120,8 +121,8 @@ if __name__ == '__main__':
     output = get_amb_surf(rep_pos.r.range, rep_pos.r.depth, K_true, synth_replica)
     print(rep_true.conj().T@p_true)
     print(rep_pos.r.range)
-    plot_amb_surf(-20, rep_pos.r.range*1e3, rep_pos.r.depth, output, 'Correct velocity', r0, zs)
-    plt.show()
+    #plot_amb_surf([-20,0], rep_pos.r.range*1e3, rep_pos.r.depth, output, 'Correct velocity', r0, zs)
+    #plt.show()
 
 
     

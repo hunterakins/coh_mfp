@@ -9,6 +9,13 @@ from signal_proc.mfp.wnc import run_wnc, lookup_run_wnc
 from signal_proc.mfp.mcm import run_mcm
 import time
 import pickle
+from matplotlib import rc
+
+rc('text', usetex=True)
+import matplotlib
+
+matplotlib.rcParams['mathtext.fontset'] = 'stix'
+matplotlib.rcParams['font.family'] = 'STIXGeneral'
 
 '''
 Description:
@@ -119,7 +126,7 @@ def get_env():
     source_freq = 100
     dz = 5 
     zmax = 216.5
-    dr = 25
+    dr = 2.5
     rmax = 1e4
     num_rcvrs = 21
     zr = np.linspace(100, 200, num_rcvrs)
@@ -221,7 +228,7 @@ def get_MCObj(num_synth_els, num_snapshots, wnc, wn_gain):
 
 
 
-    num_realizations = 100
+    num_realizations = 1000
     snr_db_list = np.linspace(5, -30,  25)
     bart_rmse_arr = np.zeros((len(snr_db_list)))
     wnc_rmse_arr = np.zeros((len(snr_db_list)))
@@ -249,6 +256,16 @@ def get_MCObj(num_synth_els, num_snapshots, wnc, wn_gain):
             range_err = best_range - r_true
             sq_err = np.square(range_err)
             bart_sq_err_arr[i] = sq_err
+            #plt.figure()
+            #plt.xlabel('Range (m)')
+            #plt.ylabel('Depth (z)')
+            #plt.pcolormesh(r, z, bart_out/bart_max_val,vmax=0, vmin=-20)
+            #plt.contourf(r, z, bart_out-np.max(bart_out))
+            #plt.gca().invert_yaxis()
+            #cb = plt.colorbar()
+            #cb.set_label('dB', rotation='horizontal')
+            #plt.scatter(r_true, zs, marker='+', color='k')
+            #plt.show()
 
             """ Get wnc amb surf and sq err """
             if wnc == True:
@@ -262,6 +279,17 @@ def get_MCObj(num_synth_els, num_snapshots, wnc, wn_gain):
                 wnc_sq_err_arr[i] = sq_err
                 wnc_db = 10*np.log10(wnc_out / np.max(wnc_out))
                 levels = np.linspace(-10, 0, 20)
+                #plt.figure()
+                #plt.xlabel('Range (m)')
+                #plt.ylabel('Depth (z)')
+                ##plt.pcolormesh(r, z, wnc_db,vmax=0, vmin=-20)
+                #print(wnc_db.shape)
+                #plt.contourf(r, z, wnc_db[0,...])
+                #plt.gca().invert_yaxis()
+                #cb = plt.colorbar()
+                #cb.set_label('dB', rotation='horizontal')
+                #plt.scatter(r_true, zs, marker='+', color='k')
+                #plt.show()
 
 
         bart_rmse = np.sqrt(np.mean(bart_sq_err_arr))
@@ -276,6 +304,112 @@ def get_MCObj(num_synth_els, num_snapshots, wnc, wn_gain):
         return bart_mc, wnc_mc
     else:
         return bart_mc
+
+
+def mv_demo():
+    num_synth_els = 5
+    num_snapshots = 4
+    wn_gain = -3
+
+    env = get_env()
+    zs = 50
+    T = 5 # time between snapshots
+    cov_T = T*num_snapshots
+    v = 2.5
+    v_err = 1.00
+    ship_dr= v*cov_T
+    print('ship_dr', ship_dr)
+
+    r, z, synth_reps = get_mult_el_reps(env, num_synth_els, v*v_err, cov_T, fname='swell')
+
+    r0 = 5e3
+    true_ind = np.argmin(np.array([abs(r0 - x) for x in r]))
+
+
+    """ Get some data """
+    env.zs = zs
+
+    synth_p_snaps = []
+    for k in range(num_snapshots):
+        rs = r0 + k*v*T
+        true_r, synth_data, synth_p_true, pos = gen_synth_data(env, num_synth_els, rs, ship_dr, 'at_files/', 'swell')
+        synth_p_snaps.append(synth_p_true)
+
+    r_true = r0 + (num_snapshots-1)/2*v*T
+    print('r true', r_true)
+
+
+
+    num_realizations = 5
+    snr_db_list = [-15,-10, -20]
+    bart_rmse_arr = np.zeros((len(snr_db_list)))
+    wnc_rmse_arr = np.zeros((len(snr_db_list)))
+    for snr_ind, snr_db in enumerate(snr_db_list):
+
+        print('snr db', snr_db)
+        bart_sq_err_arr = np.zeros((num_realizations))
+        wnc_sq_err_arr = np.zeros((num_realizations))
+    
+
+        for i in range(num_realizations):
+            """ FOrm sample cov """
+            for k in range(num_snapshots):
+                K_tmp = add_noise_cov(synth_p_snaps[k], snr_db, 1)
+                if k == 0:
+                    K_true = K_tmp
+                else:
+                    K_true += K_tmp
+
+            """ Get bart amb surf and sq err """
+            bart_out, bart_max_val = get_amb_surf(r, z, K_true, synth_reps, matmul=True)
+            best_ind = np.argmax(bart_out)
+            best_range = r[best_ind % r.size]
+            best_depth = r[best_ind // r.size]
+            range_err = best_range - r_true
+            sq_err = np.square(range_err)
+            bart_sq_err_arr[i] = sq_err
+            #plt.figure()
+            #plt.xlabel('Range (m)')
+            #plt.ylabel('Depth (z)')
+            #plt.pcolormesh(r, z, bart_out/bart_max_val,vmax=0, vmin=-20)
+            #plt.contourf(r, z, bart_out-np.max(bart_out))
+            #plt.gca().invert_yaxis()
+            #cb = plt.colorbar()
+            #cb.set_label('dB', rotation='horizontal')
+            #plt.scatter(r_true, zs, marker='+', color='k')
+            #plt.show()
+
+            K_true = K_true.reshape(1, K_true.shape[0], K_true.shape[1])
+            wnc_out = lookup_run_wnc(K_true, synth_reps, wn_gain)
+            best_ind = np.argmax(wnc_out)
+            best_range = r[best_ind % r.size]
+            best_depth = r[best_ind // r.size]
+            range_err = best_range - r_true
+            sq_err = np.square(range_err)
+            wnc_sq_err_arr[i] = sq_err
+            wnc_db = 10*np.log10(wnc_out / np.max(wnc_out))
+            #levels = np.linspace(-10, 0, 20)
+            #plt.figure()
+            #plt.xlabel('Range (m)')
+            #plt.ylabel('Depth (z)')
+            ##plt.pcolormesh(r, z, wnc_db,vmax=0, vmin=-20)
+            #print(wnc_db.shape)
+            #plt.contourf(r, z, wnc_db[0,...])
+            #plt.gca().invert_yaxis()
+            #cb = plt.colorbar()
+            #cb.set_label('dB', rotation='horizontal')
+            #plt.scatter(r_true, zs, marker='+', color='k')
+            #plt.show()
+
+
+        bart_rmse = np.sqrt(np.mean(bart_sq_err_arr))
+        bart_rmse_arr[snr_ind] = bart_rmse
+        wnc_rmse = np.sqrt(np.mean(wnc_sq_err_arr))
+        wnc_rmse_arr[snr_ind] = wnc_rmse
+
+    bart_mc = MCObj(np.array(snr_db_list), bart_rmse_arr, num_synth_els, num_snapshots, 'bart')
+    wnc_mc = MCObj(np.array(snr_db_list), wnc_rmse_arr, num_synth_els, num_snapshots, 'wnc_' + str(wn_gain))
+    return bart_mc, wnc_mc
 
 
 def make_mc_name(mc_obj, root_folder='pickles/'):
@@ -299,47 +433,86 @@ def load_mc(num_synth_els, num_snapshots, proc_type, root_folder='pickles/'):
     
 
 if __name__ == '__main__':
+    
+    #bart_mc = load_mc(5,4,'bart')
+    #wnc_mc = load_mc(5,4,'wnc_-3')
+    #bart_mc, wnc_mc = mv_demo()
+    #save_mc(bart_mc, 'rebut/')
+    #save_mc(wnc_mc, 'rebut/')
+    #fig, ax = plt.subplots(1,1)
+    #ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='r', marker='*',linestyle='-')
+    #ax.plot(wnc_mc.snr_arr, wnc_mc.rmse_arr/1000, color='b', marker='*',linestyle='-')
+    #plt.show()
 
     start_time = time.time()
 
 
     fig, ax = plt.subplots(1,1)
+    plt.grid()
     wn_gain = -1
-    wnc=False
-    load = True
+    wnc=True
+    load = False
+    #load = True
 
     if load == False:
-        bart_mc = get_MCObj(1,4,wnc,wn_gain)
-        save_mc(bart_mc, 'pickles/')
+        if wnc == False:
+            bart_mc = get_MCObj(1,4,wnc,wn_gain)
+            save_mc(bart_mc, 'pickles/')
+        else:
+            bart_mc, wnc_mc = get_MCObj(1,4,wnc,wn_gain)
+            save_mc(bart_mc, 'pickles/')
+            save_mc(wnc_mc, 'pickles/')
     else:
         bart_mc = load_mc(1, 4, 'bart') 
+        if wnc == True:
+            wnc_mc = load_mc(1, 4, 'wnc') 
+            
 
-    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='r', marker='x')
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='r', marker='*',linestyle='-')
 
     if load == False:
-        bart_mc = get_MCObj(5, 4, wnc, wn_gain)
-        save_mc(bart_mc, 'pickles/')
+        if wnc == False:
+            bart_mc = get_MCObj(5, 4, wnc, wn_gain)
+            save_mc(bart_mc, 'pickles/')
+        else:
+            bart_mc, wnc_obj = get_MCObj(5, 4, wnc, wn_gain)
+            save_mc(bart_mc, 'pickles/')
+            save_mc(wnc_mc, 'pickles/')
     else:
         bart_mc = load_mc(5, 4, 'bart') 
+        if wnc == True:
+            wnc_mc = load_mc(5, 4, 'wnc') 
 
-    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='b', marker='x')
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='b', marker='x', linestyle='-.')
 
     if load == False:
-        bart_mc = get_MCObj(10, 4, wnc, wn_gain)
-        save_mc(bart_mc, 'pickles/')
+        if wnc == False:
+            bart_mc = get_MCObj(10, 4, wnc, wn_gain)
+            save_mc(bart_mc, 'pickles/')
+        else:
+            bart_mc, wnc_mc = get_MCObj(10, 4, wnc, wn_gain)
+            save_mc(bart_mc, 'pickles/')
+            save_mc(wnc_mc, 'pickles/')
     else:
         bart_mc = load_mc(10, 4, 'bart')
+        if wnc == True:
+            wnc_mc = load_mc(10, 4, 'bart')
 
-    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='k', marker='x')
+    ax.plot(bart_mc.snr_arr, bart_mc.rmse_arr/1000, color='k', marker='+', linestyle='--')
 
-    plt.legend(['No synth els', '5 synth els', '10 synth els'])
+    plt.legend(['No synth els', '$N_{syn} = 5$', '$N_{syn}=10$'])
+    ax.set_ylabel('RMSE (km)', fontsize=15)
+    ax.text(-19.5, 2 * .8/20, 'b)', fontsize=15,color='k')
+    ax.set_xlabel('Input SNR (dB)', fontsize=15)
+    ax.set_xlim([-20, 5])
+    ax.set_ylim([0, 0.02])
 
+
+    #fig_name = '/home/hunter/research/coherent_matched_field/paper/pics/mc_sim.png'
+    #plt.savefig(fig_name)
     plt.show()
+
+
+    bart_mc
     
-    #output = lookup_run_wnc(K_true, replicas, -1)
-    #p_true = add_noise(p_true, snr_db)
-    #K_true = np.outer(p_true, p_true.conj())
-
-
-1
 

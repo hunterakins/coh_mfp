@@ -673,6 +673,7 @@ def get_tilt_arr(vv, tilt_angles, max_val_list):
     num_snaps = max_val_arr.shape[1]
     best_tilt_arr = np.zeros((num_tilt_angles, num_snaps))
     print(max_val_arr.shape, num_tilt_angles)
+    print('num snaps', num_snaps)
     for i in range(num_snaps):
         inds = [best_vel_inds[i] + x*vv.size for x in range(num_tilt_angles)]
         best_tilt_arr[:,i] = max_val_arr[inds, i]
@@ -703,18 +704,11 @@ class DRPRuns:
                 for num_synth_els in self.num_synth_el_list:
                     for tilt_angle in self.tilt_angles:
                         print('Getting data run for tilt = ', tilt_angle, ' degrees')
-                        if num_synth_els == 1:
-                            v = -2.3
+                        for v in self.vv:
                             print('Running data run for v = ', v)
                             dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
                             dr.run(**kwargs)
                             dr.save()
-                        else:
-                            for v in self.vv:
-                                print('Running data run for v = ', v)
-                                dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
-                                dr.run(**kwargs)
-                                dr.save()
 
     def save(self, str_id):
         save_loc = make_save_loc(self.proj_str, self.subfolder)
@@ -731,16 +725,10 @@ class DRPRuns:
                 for num_synth_els in self.num_synth_el_list:
                     dr_list = []
                     for tilt_angle in self.tilt_angles:
-                        if num_synth_els == 1:
-                            v = -2.3
+                        for v in self.vv:
                             dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
                             dr = load_dr(dr)
                             dr_list.append(dr)
-                        else:
-                            for v in self.vv:
-                                dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
-                                dr = load_dr(dr)
-                                dr_list.append(dr)
                             
                     best_outs = form_best_output_mat(dr_list)
                     r_center  = dr.r_center
@@ -784,26 +772,14 @@ class DRPRuns:
         dr_list = []
         max_val_list=[]
         for tilt_angle in self.tilt_angles:
-            if num_synth_els == 1: # v doesn't matter
-                v = -2.3
+            for v in self.vv:
                 dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
                 dr = load_dr(dr)
                 dr_list.append(dr)
                 max_val_list.append(dr.max_vals)
-            else:
-                for v in self.vv:
-                    dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
-                    dr = load_dr(dr)
-                    dr_list.append(dr)
-                    max_val_list.append(dr.max_vals)
-        if num_synth_els == 1:
-            vel_arr = get_vel_arr(np.array([-2.3]), self.tilt_angles, max_val_list)
-            tilt_arr = get_tilt_arr(np.array([-2.3]), self.tilt_angles, max_val_list)
-            #axes[0].contourf(dr.cov_t, np.array([-2.3]), vel_arr)
-        else:
             vel_arr = get_vel_arr(self.vv, self.tilt_angles, max_val_list)
-            tilt_arr = get_tilt_arr(self.vv, self.tilt_angles, max_val_list)
             vel_arr /= np.max(vel_arr, axis=0)
+        tilt_arr = get_tilt_arr(self.vv, self.tilt_angles, max_val_list)
         tilt_arr /= np.max(tilt_arr, axis=0)
         return dr, vel_arr, tilt_arr
 
@@ -815,19 +791,11 @@ class DRPRuns:
                     dr_list = []
                     max_val_list=[]
                     for tilt_angle in self.tilt_angles:
-                        if num_synth_els == 1:
-                            v = -2.3
+                        for v in self.vv:
                             dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
                             dr = load_dr(dr)
                             dr_list.append(dr)
                             max_val_list.append(dr.max_vals)
-                    
-                        else:
-                            for v in self.vv:
-                                dr = DataRun(self.proj_str, num_snaps, v, self.subfolder, num_freqs, num_synth_els, tilt_angle, self.incoh, self.wnc)
-                                dr = load_dr(dr)
-                                dr_list.append(dr)
-                                max_val_list.append(dr.max_vals)
                     max_val_arr = get_max_val_arr(max_val_list)
                     best_param_ind = np.argmax(max_val_arr, axis=0)
                     if len(self.tilt_angles == 1):
@@ -920,8 +888,8 @@ def form_best_output_mat(dr_list):
     return best_outs
     
 rmax = 10*1e3
-grid_dr = 100
-rmin = 600
+grid_dr = 50
+rmin = 500
 
 if __name__ == '__main__':
     #simple_stacked_bart()

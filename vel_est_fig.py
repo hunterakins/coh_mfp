@@ -56,6 +56,7 @@ def restrict_v(t_v, v, dr):
 
 
 proj_strs = ['s5_deep', 's5_quiet1', 's5_quiet2', 's5_quiet3', 's5_quiet4']
+proj_strs = proj_strs[:-1]
 fig, axes = plt.subplots(len(proj_strs),1, sharex=True, sharey=True)
 best_vs = []
 
@@ -67,11 +68,14 @@ num_snapshots = int(num_snapshots / fact)
 N_fft = fact*N_fft
 
 subfolder = str(N_fft)
-plot_descriptors = ['Loud', 'Quiet 1', 'Quiet 2', 'Quiet 3', 'Quiet 4']
+plot_descriptors = ['TSL', 'TSQ1', 'TSQ2', 'TSQ3', 'TSQ4']
 cmap = plt.cm.get_cmap('viridis')
+
+letters = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)']
+
 for i in range(len(proj_strs)):
     proj_str = proj_strs[i]
-    drp = load_mfp_results(proj_str,subfolder, num_snapshots)
+    drp = load_mfp_results(proj_str,subfolder, num_snapshots, num_synth_els)
     dr, vel_arr, tilt_arr = drp.get_param_arrs(num_snapshots,num_synth_els, 13)
     vel_arr = vel_arr[1:,:]
     vel_arr = 10*np.log10(vel_arr)
@@ -85,10 +89,21 @@ for i in range(len(proj_strs)):
 
     t_v, v = restrict_v(t_v, v, dr)
     dopp_t, dopp_v = restrict_v(dopp_t, dopp_v, dr)
-    axes[i].scatter(t_v/60, v, s=16, marker='x', color='k')
-    axes[i].scatter(dopp_t/60, dopp_v, s=8, marker='+', color='k', alpha=0.6)
+    #axes[i].scatter(t_v/60, v, s=16, marker='x', color='k')
+    if i == 0:
+        axes[i].scatter(dopp_t/60, dopp_v, marker='.', color='k', linewidth=1,alpha=1)
+        axes[i].scatter(dopp_t/60, dopp_v, marker='.', color='w', linewidth=.5,alpha=1)
+
+    axes[i].scatter(dr.cov_t/60, drp.vv[1:][np.argmax(vel_arr[1:,:], axis=0)], color='mediumblue', marker='*', alpha=1,linewidth=1)
     axes[i].set_ylabel(plot_descriptors[i])
-    axes[i].legend(['GPS', 'Doppler'], framealpha=1)
+    if i == 0:
+        bstar = axes[i].scatter([], [], color='mediumblue', marker='*', alpha=1, linewidth=2)
+        white_dot = axes[i].scatter([], [], marker='.', color='k', linewidth=2,alpha=1)
+        black_dot = axes[i].scatter([], [], marker='.', color='w', linewidth=1,alpha=1)
+        axes[i].legend([(white_dot, black_dot), bstar], ['$\hat{v}$ from Doppler','$\hat{v}_{L}$'], framealpha=1)
+    else:
+        axes[i].legend(['$\hat{v}_{Q' + str(i) + '}$'], framealpha=1)
+    axes[i].text(dopp_t[0]/60 + .5, -2.55, letters[i], color='w',fontsize=15)
    
 plt.tight_layout(pad=2)
 
@@ -96,10 +111,9 @@ cb = fig.colorbar(ax, ax=axes.ravel().tolist())
 cb.set_label('   dB', rotation='horizontal')
 fig.text(0.5, 0.01,  'Event Time (min)', ha='center')
 fig.text(0.01, 0.5,  'Source range rate (m/s)', va='center', rotation='vertical')
+fig.set_size_inches(8,4)
 
-
-
-#plt.savefig('/home/hunter/research/coherent_matched_field/pics/' + fig_name, dpi=500, orientation='landscape')
+plt.savefig('/home/hunter/research/coherent_matched_field/paper/pics/' + fig_name, dpi=500, orientation='landscape')
 
 
 plt.show()

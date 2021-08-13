@@ -43,9 +43,13 @@ def get_snr(source_freq, vv, Nfft, fact, num_snapshots, proj_str):
 
             tmp = np.mean(np.square(abs(noise_x1[:, num_snapshots*i:num_snapshots*(i+1)])))
             nx1_avg_pow[i] = tmp
+            print('n1 power', tmp)
 
             tmp = np.mean(np.square(abs(noise_x2[:, num_snapshots*i:num_snapshots*(i+1)])))
             nx2_avg_pow[i] = tmp
+            print('n2 power', tmp)
+
+            
             
             tmp = np.mean(t[num_snapshots*i:num_snapshots*(i+1)])
             cov_t[i] = tmp
@@ -69,7 +73,7 @@ if __name__ == '__main__':
     #subfolder = '2048'
     
     #Nfft = 8096 
-    for fact in [4, 8, 16, 32, 64, 128]:
+    for fact in [1, 4, 8]:#, 16, 32, 64, 128]:
         Nfft = 2048*fact
         num_snapshots = int(36 / fact)
         print('nfft, num_snaps', Nfft, num_snapshots)
@@ -86,12 +90,22 @@ if __name__ == '__main__':
         num_colors = len(tones)
         cm = plt.get_cmap('gist_rainbow')
         ax.set_prop_cycle(color=[cm(1.*i/num_colors) for i in range(num_colors)])
+        count = 0
         for source_freq in tones:
             cov_t, snr_db, best_v = get_snr(source_freq, vv, Nfft, fact, num_snapshots, proj_str)
+            if source_freq == tones[0]:
+                snr_arr = np.zeros((len(tones), len(snr_db)))
+            snr_arr[count, :] = snr_db
+            count += 1
             plt.plot(cov_t,snr_db)
         plt.legend([str(x) for x in tones])
         fig.suptitle('SNR with Nfft = ' + str(Nfft))
         ax.set_ylim([10, 38])
+
+        fig1 = plt.figure()
+        fig1.suptitle('SNR avg over freq with Nfft = ' + str(Nfft))
+        plt.plot(cov_t, np.mean(snr_arr, axis=0))
+        print('mean snr for N = ' + str(Nfft), np.mean(snr_arr))
     plt.show()
                 
             

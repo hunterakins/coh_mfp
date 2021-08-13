@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import time
 from matplotlib import pyplot as plt
 from coh_mfp.data_test import get_r_super_cov_seq, deal_with_t_x_r, load_x, get_env, populate_env, get_mult_el_reps
@@ -40,10 +41,9 @@ def get_noise_K_samps(source_freq, proj_str, subfolder, num_snapshots, num_synth
             K_samps += tmp
     return K_samps / 5
 
-def get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh=False):
+def get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh=False, tilt_angle=-1):
     print('wn_gain', wn_gain)
     for num_synth_els in [num_synth_els]:
-        tilt_angle = -1
         vv=[best_v]
         for v in vv:
             print('-----------------------------------------')
@@ -95,10 +95,9 @@ def get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v,
 
 #def get_single_freq_mcm(proj_str, subfolder, source_
 
-def get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num_snapshots, cov_index, incoh=False):
+def get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num_snapshots, cov_index, incoh=False, tilt_angle=-1):
     rm_diag = False
     for num_synth_els in [num_synth_els]:
-        tilt_angle = -1
         print('-----------------------------------------')
         now = time.time()
         fc = ms.get_fc(source_freq, v)
@@ -144,13 +143,13 @@ def get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num
         #print('bart time', time.time() - now)
     return r, z, r_center, zs, out_db, cov_t
 
-def get_stacked_wnc(proj_str, subfolder, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh=False,num_freqs=None):
+def get_stacked_wnc(proj_str, subfolder, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh=False,num_freqs=None, tilt_angle=-1):
     if type(num_freqs) == type(None):
         tones = get_proj_tones(proj_str)
     else:
         tones= get_proj_tones(proj_str)[:num_freqs]
     for source_freq in tones:
-        r, z, r_center, zs, out_db, cov_t = get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh)
+        r, z, r_center, zs, out_db, cov_t = get_single_freq_wnc(proj_str, subfolder, source_freq, num_synth_els, best_v, wn_gain, num_snapshots, cov_index, incoh, tilt_angle=tilt_angle)
         out_db -= np.max(out_db)
         if source_freq == tones[0]:
             out = out_db
@@ -159,13 +158,13 @@ def get_stacked_wnc(proj_str, subfolder, num_synth_els, best_v, wn_gain, num_sna
     out /= len(tones)
     return r, z, r_center, zs, out
 
-def get_stacked_bart(proj_str, subfolder, num_synth_els, v, num_snapshots, cov_index, incoh=False, num_freqs=None):
+def get_stacked_bart(proj_str, subfolder, num_synth_els, v, num_snapshots, cov_index, incoh=False, num_freqs=None, tilt_angle=-1):
     if type(num_freqs) == type(None):
         tones = get_proj_tones(proj_str)
     else:
         tones= get_proj_tones(proj_str)[:num_freqs]
     for source_freq in tones:
-        r, z, r_center, zs, out_db, cov_t = get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num_snapshots, cov_index, incoh)
+        r, z, r_center, zs, out_db, cov_t = get_single_freq_bart(proj_str, subfolder, source_freq, num_synth_els, v, num_snapshots, cov_index, incoh, tilt_angle=tilt_angle)
         out_db += np.max(out_db)
         if source_freq == tones[0]:
             out = out_db
@@ -212,6 +211,19 @@ def get_cov_time(proj_str, subfolder, num_snapshots, num_synth_els):
     r_center, cov_t, K_samps = get_r_super_cov_seq(t, x, num_snapshots, r_interp, num_synth_els, stride)
     return cov_t
 
+def check_v_arr(v_arr, cov_times):
+    if v_arr[0, -1] < cov_times[-1]:
+        new_t = cov_times[-1]
+        new_v = v_arr[1,-1]
+        new_entry = np.array([new_t, new_v]).reshape(2,1)
+        v_arr = np.concatenate((v_arr, new_entry), axis=1)
+
+    if v_arr[0, 0] > cov_times[0]:
+        new_t = cov_times[0]
+        new_v = v_arr[1,0]
+        new_entry = np.array([new_t, new_v]).reshape(2,1)
+        v_arr = np.concatenate((new_entry, v_arr), axis=1)
+    return v_arr
 
 #def get_full_set_estimates(proj_str, subfolder, num_synth_els, num_snapshots, wn_gain,
 
@@ -220,50 +232,63 @@ if __name__ == '__main__':
 
     #range_cell_test(source_freq)
     #sys.exit(0)
+    """
+    Example usage
+    python wnc_test.py s5_deep 1 -2 _sec1
+    """
+    proj_str = sys.argv[1]
+    fact = int(sys.argv[2])
+    wn_gain = float(sys.argv[3])
+    num_synth_els = int(sys.argv[4])
+    if len(sys.argv) == 6: # get segment tail
+        subfolder_suffix = sys.argv[5]
+        tilt_angle = -0.5
+    else: # segment tail is null because i look at sec3
+        subfolder_suffix = ''
+        tilt_angle = -1
+        
+
+    print('Running wnc_test on ', proj_str, 'with fft fact ', fact, ' and wn gina', wn_gain)
 
     N_fft = 2048
     num_snapshots = 36
-    fact = 16
     N_fft = fact*N_fft
     num_snapshots = int(num_snapshots / fact)
 
     print('N_fft, num snaps', N_fft, num_snapshots)
-    
-    for wn_gain in [-.5, -1]:
 
-        
-        
-        tilt_angle = -1
+    
+    
+    for wn_gain in [wn_gain]:
         num_freqs =13
-        num_synth_els_list = [1,5]
-        subfolder =str(N_fft)
-        vv = ms.get_vv()
-        #for proj_str in ['s5_deep', 's5_quiet2', 's5_quiet1', 's5_quiet3', 's5_quiet4']:
-        #for proj_str in ['s5_deep']:
-        for proj_str in ['s5_quiet4']:
+        num_synth_els_list = [num_synth_els]
+        for subfolder in [str(N_fft) + subfolder_suffix]:#, str(N_fft) + '_sec1']:
+            print(subfolder)
+        
+            #subfolder =str(N_fft) + '_sec1'
+            vv = ms.get_vv()
+            #for proj_str in ['s5_deep', 's5_quiet2', 's5_quiet1', 's5_quiet3']:#, 's5_quiet4']:
+        #for proj_str in ['s5_quiet1']:
 
             proj_tones = get_proj_tones(proj_str)
             source_freq = proj_tones[7]
             print('soruce freq', source_freq)
 
-            cov_times = get_cov_time(proj_str, subfolder, num_snapshots, max(num_synth_els_list))
-            v_arr = load_vel_arr(proj_str, subfolder, num_snapshots)
 
-            if v_arr[0, -1] < cov_times[-1]:
-                new_t = cov_times[-1]
-                new_v = v_arr[1,-1]
-                new_entry = np.array([new_t, new_v]).reshape(2,1)
-                v_arr = np.concatenate((v_arr, new_entry), axis=1)
-
-
-            
-            num_covs = len(cov_times)
-            v_interp = interp1d(v_arr[0,:], v_arr[1,:])
 
             for num_synth_els in num_synth_els_list:
+                if num_synth_els == 1:
+                    cov_times = get_cov_time(proj_str, subfolder, num_snapshots, 5)
+                    v_arr = load_vel_arr(proj_str, subfolder, num_snapshots, 5)
+                else:
+                    cov_times = get_cov_time(proj_str, subfolder, num_snapshots, num_synth_els)
+                    v_arr = load_vel_arr(proj_str, subfolder, num_snapshots, num_synth_els)
+                v_arr = check_v_arr(v_arr, cov_times)
+                v_interp = interp1d(v_arr[0,:], v_arr[1,:])
+
                 tones = proj_tones[:num_freqs]
+                #for cov_index in range(cov_times.size):
                 for cov_index in range(cov_times.size):
-                #for cov_index in range(5):
 
                     cov_time = cov_times[cov_index]
                     print('cov time based on index', cov_time)
@@ -273,13 +298,12 @@ if __name__ == '__main__':
                     print('v source', v_source)
 
 
-                    r,z, r_center, zs, out_db, cov_t = get_stacked_bart(proj_str, subfolder, num_synth_els, v_source, num_snapshots, cov_index, incoh=False, num_freqs=num_freqs)
-                    print('cov time', cov_t)
+                    r,z, r_center, zs, out_db, cov_t = get_stacked_bart(proj_str, subfolder, num_synth_els, v_source, num_snapshots, cov_index, incoh=False, num_freqs=num_freqs,tilt_angle=tilt_angle)
                     spo = SwellProcObj(tones, num_snapshots, proj_str, subfolder, r_center, zs, cov_t, v_source, tilt_angle, num_synth_els, r, z, out_db)
 
                     spo.get_bathy_corr()
                     
-                    r,z,r_center, zs, out_db = get_stacked_wnc(proj_str, subfolder, num_synth_els, v_source, wn_gain, num_snapshots, cov_index, num_freqs=num_freqs)
+                    r,z,r_center, zs, out_db = get_stacked_wnc(proj_str, subfolder, num_synth_els, v_source, wn_gain, num_snapshots, cov_index, num_freqs=num_freqs, tilt_angle=tilt_angle)
 
                     spo.add_wnc(wn_gain, out_db[0,:,:])
                     name = spo.save()

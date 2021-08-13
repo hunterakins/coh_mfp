@@ -46,11 +46,19 @@ def get_hit_prcnt(cov_times, range_vals):
     print('rmse', rmse)
     return sq_diffs
 
+def map_to_orig_grid(og_grid, corr_grid, vals):
+    new_vals=np.zeros(vals.shape)
+    for i in range(og_grid.size):
+        #print(np.argmin(abs(og_grid[i] - og_grid)), i)
+        best_val = vals[np.argmin(abs(og_grid[i] - corr_grid))]
+        if og_grid[i] > np.max(corr_grid):
+            best_val = -15
+        new_vals[i] = best_val
+    return new_vals
+        
 if __name__ == '__main__':
-
-    #proj_str = 's5_quiet2'
-    #proj_str = 's5_deep'
-    proj_str = 's5_quiet3'
+    proj_str = 's5_quiet1'
+    #proj_str = 's5_quiet3'
 
     N_fft = 2048
     num_snapshots = 36
@@ -60,24 +68,27 @@ if __name__ == '__main__':
     long_snap = False
     synth_N_fft = fact*N_fft
     synth_num_snapshots = int(num_snapshots / fact)
-    fig_name = proj_str + '_range_est_color.png'
+    fig_name = proj_str + '_range_perf_comp.png'
         
-    fig, axes = plt.subplots(2,2, sharex='col', sharey='row')
+    fig, axes = plt.subplots(2,3, sharey='row')
     db_min = -15
-    for sub_count in range(1):
+    min_times = []
+    for sub_count in range(3):
+        num_synth_els = 5
         subfolder = str(N_fft) 
         synth_subfolder = str(synth_N_fft)
         tilt_angle = -1 
         if sub_count == 1:
             subfolder += '_sec2'
             synth_subfolder += '_sec2'
+            num_synth_els = 5
             tilt_angle = -.5
+            #synth_wn_gain = -.5
         elif sub_count == 2:
             subfolder = str(N_fft) + '_sec1'
             synth_subfolder = str(synth_N_fft) + '_sec1'
             num_synth_els = 8
             tilt_angle = -.5
-        num_synth_els = 5
         num_freqs = 13
         synth_wn_gain = -0.5
         wn_gain = -2.0
@@ -99,37 +110,13 @@ if __name__ == '__main__':
         wnc = True
         #wnc = False
 
-
-        for cov_index in range(cov_times.size):
-            cov_time = cov_times[cov_index]
-            v_source = v_interp(cov_time)
-
-            spo = load_spo(root_folder, proj_str, subfolder, num_snapshots, tilt_angle, 1, num_freqs, v_source, cov_time, wn_gain)
-            spo.get_bathy_corr()
-            spo.wnc_out -= np.max(spo.wnc_out)
-            spo.bart_out -= np.max(spo.bart_out)
-
-
-            if cov_index == 0:
-                simple_range_vals = np.zeros((cov_times.size, spo.corr_grid_r.size))
-                simple_depth_vals = np.zeros((cov_times.size, spo.corr_grid_z.size))
-
-            if wnc == True:
-                simple_range_vals[cov_index, :] = np.max(spo.wnc_out, axis=0)
-                simple_depth_vals[cov_index, :] = np.max(spo.wnc_out, axis=1)
-            else:
-                simple_range_vals[cov_index, :] = np.max(spo.bart_out, axis=0)
-                simple_depth_vals[cov_index, :] = np.max(spo.bart_out, axis=1)
-
-
-
         """ NOW DO SYNTHETIC """
         for cov_index in range(synth_cov_times.size):
             cov_time = synth_cov_times[cov_index]
             v_source = synth_v_interp(cov_time)
             v_source = vv[np.argmin([abs(v_source -x) for x in vv])]
             synth_spo = load_spo(root_folder, proj_str, synth_subfolder, synth_num_snapshots, tilt_angle, num_synth_els, num_freqs, v_source, cov_time, synth_wn_gain)
-            synth_spo.get_bathy_corr()
+            #synth_spo.get_bathy_corr()
             synth_spo.wnc_out -= np.max(synth_spo.wnc_out)
             synth_spo.bart_out -= np.max(synth_spo.bart_out)
 
@@ -148,48 +135,43 @@ if __name__ == '__main__':
                 est = synth_spo.corr_grid_r[np.argmax(synth_spo.bart_out) % synth_spo.corr_grid_r.size]
                 range_est[cov_index] = est
 
-        pcnt_corr = get_hit_prcnt(synth_cov_times, range_est)
 
+            synth_range_vals[cov_index, :] = map_to_orig_grid(synth_spo.grid_r, synth_spo.corr_grid_r, synth_range_vals[cov_index,:])
+            synth_depth_vals[cov_index, :] = map_to_orig_grid(synth_spo.grid_z, synth_spo.corr_grid_z, synth_depth_vals[cov_index,:])
 
-        print(np.min(synth_spo.corr_grid_r), np.max(synth_spo.corr_grid_r))    
-        print(np.min(spo.corr_grid_r), np.max(spo.corr_grid_r))    
-        cf = axes[1,1].pcolormesh(synth_cov_times/60, synth_spo.corr_grid_r,synth_range_vals.T, vmin=db_min, vmax=0, cmap=cmap)
-        cf = axes[1,0].pcolormesh(cov_times/60, spo.corr_grid_r,simple_range_vals.T, vmin=db_min, vmax=0, cmap=cmap)
-        cf = axes[0,1].pcolormesh(synth_cov_times/60, synth_spo.corr_grid_z,synth_depth_vals.T, vmin=db_min, vmax=0, cmap=cmap)
-        cf = axes[0,0].pcolormesh(cov_times/60, spo.corr_grid_z,simple_depth_vals.T, vmin=db_min, vmax=0, cmap=cmap)
+        min_times.append(np.min(synth_cov_times))
 
+ 
+        cf = axes[1,2-sub_count].pcolormesh(synth_cov_times/60, synth_spo.grid_r,synth_range_vals.T, vmin=db_min, vmax=0, cmap=cmap, shading='auto')
+        cf = axes[0,2-sub_count].pcolormesh(synth_cov_times/60, synth_spo.grid_z,synth_depth_vals.T, vmin=db_min, vmax=0, cmap=cmap, shading='auto')
+
+    
+
+    axes[0, 0].invert_yaxis()
     cb = fig.colorbar(cf, ax=axes.ravel().tolist())
-    cb.set_label('dB', rotation='vertical', fontsize=12)
+    cb.set_label('dB', rotation='vertical')
 
-    cols = ['Traditional WNC', 'Range-coherent WNC']
+    #cols = ['Traditional', 'Range-coherent']
 
-    axes[0,0].invert_yaxis()
-    for i in range(2):
-        axes[0,i].set_title(cols[i], fontsize=15)
+    #axes[0,0].invert_yaxis()
 
 
-    fig.text(0.5, 0.02, 'Event Time (min)', ha='center', fontsize=15)
-    axes[0,0].set_ylabel('Depth (m)', fontsize=15)
-    axes[1,0].set_ylabel('Range (m)', fontsize=15)
+    fig.text(0.5, 0.02, 'Event Time (min)', ha='center')
+    axes[0,0].set_ylabel('Depth (m)')
+    axes[1,0].set_ylabel('Range (m)')
 
-
-    letters = ['e)', 'f)', 'g)', 'h)']
-
-    if proj_str == 's5_deep':
-        letters = ['a)', 'b)', 'c)', 'd)']
+    letters = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)']
+    time_locs = [x/60 + 0.5 for x in min_times][::-1]
+    print(time_locs)
     i = 0
     for ax in axes.ravel().tolist():
-        if i < 2:
-            ax.text(40.5, 175, letters[i], color='w', fontsize=26)
+        if i < 3:
+            ax.text(time_locs[i%3], 200, letters[i], color='w', fontsize=15)
         else:
-            ax.text(40.5, 1000, letters[i], color='w', fontsize=26)
+            ax.text(time_locs[i%3], 1000, letters[i], color='w', fontsize=15)
         i += 1
     
-    #fig.set_size_inches(8, 4)
-
-    if proj_str == 's5_deep':
-        cb.remove()
-
-    plt.savefig('/home/hunter/research/coherent_matched_field/paper/pics/' + fig_name, dpi=500, orientation='landscape',bbox_inches='tight')
+    fig.set_size_inches(8, 4)
+    plt.savefig('/home/hunter/research/coherent_matched_field/paper/pics/' + fig_name, dpi=500, orientation='landscape')
     plt.show()
         

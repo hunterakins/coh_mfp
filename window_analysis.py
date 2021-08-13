@@ -16,7 +16,7 @@ Institution: Scripps Institution of Oceanography, UC San Diego
 
 from scipy.signal.windows import get_window
 
-window_len = 1024
+window_len = 1500
 N_fft = 4*8096
 hamm = get_window('hamming', window_len)
 
